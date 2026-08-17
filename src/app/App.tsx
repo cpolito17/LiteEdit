@@ -85,8 +85,8 @@ function App() {
           <span className="brand-mark" aria-hidden="true">
             LE
           </span>
-          <span className="brand-name">LITEEDIT</span>
-          <span className="brand-version">V0.2 / INDUSTRIAL SHELL</span>
+          <span className="brand-name">LiteEdit</span>
+          <span className="brand-version">V0.2 / TECHNICAL SHELL</span>
         </div>
 
         <div className="command-actions" role="group" aria-label="Document commands">

@@ -1,4 +1,5 @@
 import {
+  cloneElement,
   forwardRef,
   useEffect,
   useId,
@@ -6,6 +7,7 @@ import {
   useState,
   type ButtonHTMLAttributes,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactElement,
   type ReactNode,
 } from "react";
 
@@ -29,16 +31,18 @@ export const UiButton = forwardRef<HTMLButtonElement, UiButtonProps>(function Ui
 
 type TooltipProps = {
   label: string;
-  children: ReactNode;
+  children: ReactElement<{ "aria-describedby"?: string }>;
 };
 
 export function Tooltip({ label, children }: TooltipProps) {
+  const tooltipId = useId();
+
   return (
     <span className="tooltip-wrap">
-      <span className="tooltip-content" role="tooltip">
+      <span id={tooltipId} className="tooltip-content" role="tooltip">
         {label}
       </span>
-      {children}
+      {cloneElement(children, { "aria-describedby": tooltipId })}
     </span>
   );
 }

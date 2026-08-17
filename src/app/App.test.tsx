@@ -8,6 +8,7 @@ describe("LiteEdit bootstrap shell", () => {
     render(<App />);
 
     expect(screen.getByRole("heading", { name: "LOCAL IMAGE WORKBENCH" })).toBeVisible();
+    expect(screen.getByText("LiteEdit", { exact: true })).toBeVisible();
     expect(
       screen.getByText("LOCAL PROCESSING / IMAGE DATA DOES NOT LEAVE THIS DEVICE"),
     ).toBeVisible();

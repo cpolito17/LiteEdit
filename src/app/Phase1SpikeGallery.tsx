@@ -60,7 +60,7 @@ function createCheckerboard(): HTMLCanvasElement {
   const cellSize = 10;
   for (let row = 0; row < 10; row += 1) {
     for (let column = 0; column < 10; column += 1) {
-      context.fillStyle = (row + column) % 2 === 0 ? "#eaeaea" : "#343434";
+      context.fillStyle = (row + column) % 2 === 0 ? "#f1f5f2" : "#273239";
       context.fillRect(column * cellSize, row * cellSize, cellSize, cellSize);
     }
   }
@@ -121,7 +121,7 @@ function renderWarp(canvas: HTMLCanvasElement): void {
   ];
   const triangles = buildMeshTriangles(100, 100, nodes);
 
-  context.fillStyle = "#101010";
+  context.fillStyle = "#11181c";
   context.fillRect(0, 0, canvas.width, canvas.height);
 
   for (const triangle of triangles) {
@@ -138,7 +138,7 @@ function renderWarp(canvas: HTMLCanvasElement): void {
   }
 
   context.setTransform(1, 0, 0, 1, 0, 0);
-  context.strokeStyle = "#ff6b6b";
+  context.strokeStyle = "#70ffd2";
   context.lineWidth = 1;
   for (const triangle of triangles) {
     context.beginPath();
@@ -189,9 +189,9 @@ function drawHistorySurface(canvas: HTMLCanvasElement): Uint8ClampedArray {
     throw new Error("The browser did not provide a 2D canvas context.");
   }
 
-  context.fillStyle = "#101010";
+  context.fillStyle = "#11181c";
   context.fillRect(0, 0, canvas.width, canvas.height);
-  context.strokeStyle = "#3a3a36";
+  context.strokeStyle = "#344149";
   context.lineWidth = 1;
   for (let x = 0; x <= canvas.width; x += 32) {
     context.beginPath();
@@ -226,11 +226,11 @@ function createJpegWorkload(): HTMLCanvasElement {
     throw new Error("The browser did not provide a 2D canvas context.");
   }
 
-  context.fillStyle = "#15202b";
+  context.fillStyle = "#192329";
   context.fillRect(0, 0, canvas.width, canvas.height);
   for (let row = 0; row < 32; row += 1) {
     for (let column = 0; column < 32; column += 1) {
-      context.fillStyle = (row + column) % 2 === 0 ? "#e61919" : "#202020";
+      context.fillStyle = (row + column) % 2 === 0 ? "#ff9137" : "#273239";
       context.fillRect(column * 128, row * 128, 128, 128);
     }
   }
@@ -325,9 +325,9 @@ export function Phase1SpikeGallery() {
     if (!context) {
       return;
     }
-    context.fillStyle = "#303030";
+    context.fillStyle = "#273239";
     context.fillRect(0, 0, backing.width, backing.height);
-    context.fillStyle = "#e61919";
+    context.fillStyle = "#ff9137";
     context.fillRect(24, 24, 64, 48);
     const image = createRasterFabricImage(backing);
     display.add(image);
@@ -370,7 +370,7 @@ export function Phase1SpikeGallery() {
       return;
     }
 
-    context.fillStyle = "#ff6b6b";
+    context.fillStyle = "#70ffd2";
     context.fillRect(96, 32, 42, 64);
     demo.revision += 1;
     const result = syncRasterSurface(demo.image as unknown as RasterImageAdapter, {
@@ -408,7 +408,7 @@ export function Phase1SpikeGallery() {
     demo.after = null;
     demo.patch = null;
     demo.drawing = true;
-    context.strokeStyle = "#ff6b6b";
+    context.strokeStyle = "#70ffd2";
     context.lineWidth = 8;
     context.lineCap = "square";
     context.beginPath();

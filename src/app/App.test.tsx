@@ -12,6 +12,9 @@ describe("LiteEdit bootstrap shell", () => {
     expect(
       screen.getByText("LOCAL PROCESSING / IMAGE DATA DOES NOT LEAVE THIS DEVICE"),
     ).toBeVisible();
+    expect(screen.getByRole("button", { name: "OPEN" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "EXPORT" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "OPEN IMAGE // PHASE 3" })).toBeEnabled();
     expect(screen.getByRole("button", { name: /BRUSH tool/i })).toHaveAttribute(
       "aria-pressed",
       "false",
@@ -32,6 +35,9 @@ describe("LiteEdit bootstrap shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "NEW" }));
     expect(screen.getByRole("dialog", { name: "NEW DOCUMENT" })).toBeVisible();
+    expect(screen.getByRole("spinbutton", { name: "WIDTH" })).toHaveValue(1920);
+    expect(screen.getByRole("spinbutton", { name: "HEIGHT" })).toHaveValue(1080);
+    expect(screen.getByRole("combobox", { name: "BACKGROUND" })).toHaveValue("transparent");
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "NEW DOCUMENT" })).not.toBeInTheDocument();

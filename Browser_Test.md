@@ -1,6 +1,6 @@
 # LiteEdit Browser Test Plan
 
-This document covers the browser checks for the merged Phase 0-2 work and the remaining Phase 1 technical gate.
+This document covers the browser checks for the merged Phase 0-3 work, the Phase 1 technical gate, and the Phase 3 local document workflow.
 
 Do not mark a check as `PASS` when the feature is only covered by a jsdom or unit test. Use `BLOCKED` when the required browser or test harness is not available.
 
@@ -63,11 +63,11 @@ Run each check at `1024 x 768`, `1440 x 900`, and `1920 x 1080`.
 | -------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | SHELL-01 | Resize the viewport to each required size.        | The command bar, tool rail, canvas zone, inspector, and status bar remain visible. No horizontal scrollbar or clipped primary control appears.                                                           |
 | SHELL-02 | Inspect the canvas zone and all shell surfaces.   | The canvas uses a deterministic low-contrast square grid. The shell uses modest corner radii and soft elevation where appropriate. It has no CSS gradients, scanline overlay, or animated visual effect. |
-| SHELL-03 | Inspect the top command bar.                      | LiteEdit branding, `OPEN`, `EXPORT`, `UNDO`, `NEW`, and `LOCAL / READY` are visible. `OPEN`, `EXPORT`, and `UNDO` are disabled. `NEW` is enabled.                                                        |
+| SHELL-03 | Inspect the top command bar.                      | LiteEdit branding, `OPEN`, `EXPORT`, `UNDO`, `NEW`, and `LOCAL / READY` are visible. `OPEN` and `NEW` are enabled. `EXPORT` and `UNDO` are disabled until a document is loaded.                          |
 | SHELL-04 | Inspect the left tool rail.                       | All ten tools are visible: Move, Marquee, Lasso, Select, Brush, Shape, Eraser, Crop, Picker, and Hand. Each is a button with an accessible name, shortcut text, visible focus state, and `aria-pressed`. |
-| SHELL-05 | Inspect the empty canvas state.                   | `LOCAL IMAGE WORKBENCH`, the no-document message, the local-processing notice, viewport rulers, and zoom status are visible. `OPEN IMAGE // PHASE 3` is disabled.                                        |
+| SHELL-05 | Inspect the empty canvas state.                   | `LOCAL IMAGE WORKBENCH`, the no-document message, the local-processing notice, viewport rulers, and zoom status are visible. `OPEN IMAGE // PHASE 3` is enabled.                                         |
 | SHELL-06 | Inspect the right inspector.                      | The four tabs `LAYERS`, `HISTORY`, `PROPERTIES`, and `SWATCHES` are visible. The active tab is clear without relying on color alone.                                                                     |
-| SHELL-07 | Inspect the bottom status bar.                    | Document, size, active-tool, and `BUILD / PHASE 2` status text are visible and readable.                                                                                                                 |
+| SHELL-07 | Inspect the bottom status bar.                    | Document, size, pointer, active-tool, and `BUILD / PHASE 3` status text are visible and readable.                                                                                                        |
 | SHELL-08 | Inspect the shell at normal and high-DPI scaling. | Text remains legible. Controls remain at least 32 px high where applicable. No control overlaps another.                                                                                                 |
 
 ## 4. Keyboard and focus checks
@@ -125,7 +125,25 @@ Open the development-only browser harness at `/__spikes/phase1`. It renders the 
 | GATE-06 | Open `/__spikes/phase1` and click `RUN 4096 JPEG SEARCH`.                                                                                         | The search uses a real browser JPEG encoder, reaches its reported target tolerance when possible, and does not freeze the browser UI.                                                                                                |
 | GATE-07 | Record the Phase 1 result for each of the six spikes.                                                                                             | Each spike has a reproducible result, evidence, and an explicit `PASS`, `FAIL`, or `BLOCKED` state. The Object Selection engine is not considered selected until GATE-04 passes.                                                     |
 
-## 8. Feedback format
+## 8. Phase 3 local document workflow
+
+Use a small PNG, JPEG, and WebP fixture that is permitted for local testing. Do not commit image fixtures unless their rights and size are approved. Keep the browser Network panel open during import and export checks.
+
+| ID     | Action                                                                                                   | Expected outcome                                                                                                                                              |
+| ------ | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DOC-01 | Click `OPEN` or `OPEN IMAGE // PHASE 3`, then choose a PNG, JPEG, or WebP file.                          | The image opens in the editor as one visible raster layer. The document name, pixel dimensions, layer name, and `BUILD / PHASE 3` status update.              |
+| DOC-02 | Drag a supported PNG, JPEG, or WebP file over the canvas zone and release it.                            | The same local import path opens the document. No page navigation or browser file upload occurs.                                                              |
+| DOC-03 | Try a GIF, a file with a mismatched image type, and a file larger than the documented local limit.       | LiteEdit rejects each file before creating a document and shows a readable warning. The existing document, if any, remains unchanged.                         |
+| DOC-04 | Click `NEW`, enter valid width and height values, choose Transparent, White, and Black, and create each. | A blank document opens at the requested size. Transparent keeps the canvas alpha; White and Black fill the backing canvas.                                    |
+| DOC-05 | Move the pointer over the document and inspect the status bar.                                           | `POINTER / X #### / Y ####` reports document coordinates, not screen coordinates. It clears or shows dashes outside the document bounds.                      |
+| NAV-01 | Click `FIT`, click `100%`, change the Properties zoom slider, and use the mouse wheel over the document. | Fit centers the full document, 100% shows one document pixel per canvas pixel, the slider clamps to 5%-3200%, and wheel zoom remains centered on the pointer. |
+| NAV-02 | Select `HAND`, drag the document, then hold Space and drag with another active tool.                     | The viewport pans without changing document pixels. The cursor communicates grab/grabbing state.                                                              |
+| DOC-06 | With an unchanged imported or blank document, click `EXPORT`, then inspect the downloaded PNG.           | The exported PNG uses document resolution, excludes viewport controls and overlays, and matches the source pixels for an unchanged import.                    |
+| DOC-07 | Monitor the Network panel while importing, navigating, and exporting a local image.                      | No image bytes or document data are sent to a server. The import uses a browser-local object URL and export uses a browser download.                          |
+
+For each fixture, record the fixture dimensions, browser, result, and evidence. If a browser cannot decode WebP, mark only that fixture `BLOCKED` and continue with PNG and JPEG.
+
+## 9. Feedback format
 
 Return one row for every ID. Do not omit blocked or not-run checks.
 

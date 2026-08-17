@@ -11,7 +11,8 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "npm run build && vite preview --config vite.e2e.config.ts --host 127.0.0.1",
+    command:
+      "npm run build && ./node_modules/.bin/vite preview --config vite.e2e.config.ts --host 127.0.0.1",
     url: "http://127.0.0.1:4173",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

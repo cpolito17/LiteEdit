@@ -253,6 +253,71 @@ button:disabled {
   background-position: -1px -1px;
 }
 
+.document-viewport {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  background: transparent;
+  outline: 0;
+  touch-action: none;
+}
+
+.document-viewport:focus-visible {
+  outline: 2px solid var(--accent-lemon);
+  outline-offset: -4px;
+}
+
+.document-viewport.is-hand {
+  cursor: grab;
+}
+
+.document-viewport.is-panning {
+  cursor: grabbing;
+}
+
+.document-viewport .canvas-container {
+  position: absolute !important;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.document-viewport canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.viewport-actions {
+  position: absolute;
+  z-index: 4;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgb(13 18 21 / 88%);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 22%);
+}
+
+.viewport-button {
+  min-height: 27px;
+  padding: 0 8px;
+  font-size: 9px;
+}
+
+.viewport-zoom-label {
+  min-width: 42px;
+  color: var(--accent-lemon);
+  font-size: 9px;
+  text-align: center;
+}
+
 .empty-state {
   z-index: 1;
   display: grid;
@@ -304,6 +369,16 @@ button:disabled {
 .primary-action {
   min-height: 38px;
   padding: 0 16px;
+}
+
+.import-error {
+  max-width: 340px;
+  margin: 14px 0 0;
+  color: var(--accent-orange);
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0;
 }
 
 .privacy-line {
@@ -404,6 +479,48 @@ button:disabled {
   margin-top: 20px;
 }
 
+.document-layer-summary {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.layer-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+  font-size: 10px;
+}
+
+.layer-row.is-active {
+  border-color: rgb(112 255 210 / 42%);
+  background: rgb(112 255 210 / 7%);
+  color: var(--ink);
+}
+
+.layer-visibility {
+  color: var(--accent-mint);
+  font-size: 9px;
+}
+
+.layer-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layer-type {
+  color: var(--ink-dim);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+}
+
 .field-group {
   display: grid;
   gap: 8px;
@@ -462,6 +579,37 @@ button:disabled {
   padding: 0 8px;
   color: var(--ink-dim);
   font-size: 9px;
+}
+
+.new-document-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.new-document-background {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.new-document-background select {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-0);
+  color: var(--ink);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.new-document-background select:focus-visible {
+  outline: 2px solid var(--accent-lemon);
+  outline-offset: -2px;
 }
 
 .status-bar {
@@ -711,9 +859,21 @@ button:disabled {
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 2px solid var(--accent-lemon);
   outline-offset: -3px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

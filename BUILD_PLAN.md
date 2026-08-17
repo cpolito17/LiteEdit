@@ -22,21 +22,21 @@ This is not a small canvas demo. Warp, raster selections, brush history, and obj
 
 ## 2. Decisions and assumptions
 
-| Decision          | v1 choice                                              | Reason                                                                                                                  |
-| ----------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| Public URL        | `liteedit.charliepolito.com`                           | A Worker Custom Domain avoids path-prefix and routing conflicts with `charliepolito.com`.                               |
-| Processing        | Local browser only                                     | Better privacy, lower operating cost, and no upload latency.                                                            |
-| Backend storage   | None                                                   | v1 does not need KV, D1, R2, accounts, or server-side image processing.                                                 |
-| UI archetype      | Tactical Telemetry & CRT Terminal                      | A dark editor shell fits image work and follows one visual mode consistently.                                           |
-| App stack         | React, TypeScript, Vite                                | Mature tooling and clear component boundaries.                                                                          |
-| Cloudflare stack  | Workers Static Assets with the Cloudflare Vite plugin  | It deploys the SPA as a Worker without an unnecessary API layer.                                                        |
-| Interactive scene | Fabric.js behind an adapter                            | It provides object hit testing, grouping, transforms, vector shapes, viewport transforms, and serialization primitives. |
-| Application state | Typed document model plus Zustand UI stores            | Fabric objects must not become the only source of truth.                                                                |
-| Raster state      | Per-layer backing canvases outside React state         | Pixel buffers are too large and mutable for React or Zustand.                                                           |
-| History           | Command transactions plus raster tile patches          | Full-document snapshots after every action will exhaust memory.                                                         |
-| Object Selection  | Foreground extraction inside a user-drawn box or lasso | This is more useful than simple layer selection and can remain local. The engine is selected by a Phase 1 spike.        |
-| Warp              | Destructive 3 x 3 mesh warp on raster layers           | It is testable and useful without building a full liquify system.                                                       |
-| Mobile            | Not a v1 target                                        | The required editor needs desktop pointer and keyboard interaction.                                                     |
+| Decision          | v1 choice                                              | Reason                                                                                                                        |
+| ----------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| Public URL        | `liteedit.charliepolito.com`                           | A Worker Custom Domain avoids path-prefix and routing conflicts with `charliepolito.com`.                                     |
+| Processing        | Local browser only                                     | Better privacy, lower operating cost, and no upload latency.                                                                  |
+| Backend storage   | None                                                   | v1 does not need KV, D1, R2, accounts, or server-side image processing.                                                       |
+| UI archetype      | Soft Technical dark workspace                          | A calm, high-contrast editor shell fits image work while the mint, lemon, gold, and orange accents preserve clear state cues. |
+| App stack         | React, TypeScript, Vite                                | Mature tooling and clear component boundaries.                                                                                |
+| Cloudflare stack  | Workers Static Assets with the Cloudflare Vite plugin  | It deploys the SPA as a Worker without an unnecessary API layer.                                                              |
+| Interactive scene | Fabric.js behind an adapter                            | It provides object hit testing, grouping, transforms, vector shapes, viewport transforms, and serialization primitives.       |
+| Application state | Typed document model plus Zustand UI stores            | Fabric objects must not become the only source of truth.                                                                      |
+| Raster state      | Per-layer backing canvases outside React state         | Pixel buffers are too large and mutable for React or Zustand.                                                                 |
+| History           | Command transactions plus raster tile patches          | Full-document snapshots after every action will exhaust memory.                                                               |
+| Object Selection  | Foreground extraction inside a user-drawn box or lasso | This is more useful than simple layer selection and can remain local. The engine is selected by a Phase 1 spike.              |
+| Warp              | Destructive 3 x 3 mesh warp on raster layers           | It is testable and useful without building a full liquify system.                                                             |
+| Mobile            | Not a v1 target                                        | The required editor needs desktop pointer and keyboard interaction.                                                           |
 
 Important scope assumption: “Object Selection” means foreground extraction inside a region supplied by the user. It does not mean a full semantic model that identifies every object in a scene automatically. If automatic semantic segmentation is required, treat it as a separate lazy-loaded module and reapprove the bundle and performance budgets.
 
@@ -954,18 +954,18 @@ Use Cloudflare's version rollback to restore the previous known-good deployment,
 
 ## 14. Risk register
 
-| Risk                                             | Probability | Impact | Mitigation                                                                                        |
-| ------------------------------------------------ | ----------- | ------ | ------------------------------------------------------------------------------------------------- |
-| Object Selection is too slow or too large        | High        | High   | Phase 1 comparison, lazy loading, strict acceptance gate, owner decision if no approach passes.   |
-| Fabric behavior diverges from the document model | Medium      | High   | Renderer adapter, invariant tests, model as source of truth, golden export tests.                 |
-| Raster history exhausts memory                   | High        | High   | Dirty-tile patches, byte accounting, transaction limits, visible memory status.                   |
-| Warp creates seams or destructive drift          | Medium      | High   | Checkerboard spike, exact cancel, golden tests at high zoom.                                      |
-| Large photos freeze the main thread              | High        | High   | Early limits, workers, transferable buffers, progress, cancellation, stale-result rejection.      |
-| Browser encoders miss target JPEG size           | Medium      | Medium | Bounded search, report measured size, allow dimension reduction, never promise exact bytes.       |
-| CRT styling harms image judgment                 | Medium      | High   | Effects only on chrome, no overlays above canvas or color controls, neutral dark canvas surround. |
-| Keyboard shortcuts conflict with inputs/browser  | Medium      | Medium | Central shortcut router, focus checks, browser test matrix.                                       |
-| Custom Domain conflicts with DNS                 | Low         | High   | Read-only DNS check before deploy; stop on conflict.                                              |
-| Scope expands toward Photoshop parity            | High        | High   | Feature contracts, explicit exclusions, one-issue PRs, ADR and owner approval for expansion.      |
+| Risk                                             | Probability | Impact | Mitigation                                                                                                                 |
+| ------------------------------------------------ | ----------- | ------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Object Selection is too slow or too large        | High        | High   | Phase 1 comparison, lazy loading, strict acceptance gate, owner decision if no approach passes.                            |
+| Fabric behavior diverges from the document model | Medium      | High   | Renderer adapter, invariant tests, model as source of truth, golden export tests.                                          |
+| Raster history exhausts memory                   | High        | High   | Dirty-tile patches, byte accounting, transaction limits, visible memory status.                                            |
+| Warp creates seams or destructive drift          | Medium      | High   | Checkerboard spike, exact cancel, golden tests at high zoom.                                                               |
+| Large photos freeze the main thread              | High        | High   | Early limits, workers, transferable buffers, progress, cancellation, stale-result rejection.                               |
+| Browser encoders miss target JPEG size           | Medium      | Medium | Bounded search, report measured size, allow dimension reduction, never promise exact bytes.                                |
+| Accent styling harms image judgment              | Medium      | High   | Keep accents on chrome and state cues, with no overlays above canvas or color controls and a neutral dark canvas surround. |
+| Keyboard shortcuts conflict with inputs/browser  | Medium      | Medium | Central shortcut router, focus checks, browser test matrix.                                                                |
+| Custom Domain conflicts with DNS                 | Low         | High   | Read-only DNS check before deploy; stop on conflict.                                                                       |
+| Scope expands toward Photoshop parity            | High        | High   | Feature contracts, explicit exclusions, one-issue PRs, ADR and owner approval for expansion.                               |
 
 ## 15. Reference sources
 

@@ -5,10 +5,12 @@
   --surface-3: #232323;
   --ink: #eaeaea;
   --ink-muted: #9b9b96;
-  --ink-dim: #64645f;
+  --ink-dim: #8c8c84;
   --line: #3a3a36;
   --line-strong: #65655f;
-  --hazard: #e61919;
+  --hazard: #ff6b6b;
+  --hazard-strong: #b01010;
+  --hazard-strong-hover: #c41616;
   --status-ok: #4af626;
   --canvas: #101010;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);

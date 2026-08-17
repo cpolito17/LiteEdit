@@ -22,21 +22,21 @@ This is not a small canvas demo. Warp, raster selections, brush history, and obj
 
 ## 2. Decisions and assumptions
 
-| Decision | v1 choice | Reason |
-| --- | --- | --- |
-| Public URL | `liteedit.charliepolito.com` | A Worker Custom Domain avoids path-prefix and routing conflicts with `charliepolito.com`. |
-| Processing | Local browser only | Better privacy, lower operating cost, and no upload latency. |
-| Backend storage | None | v1 does not need KV, D1, R2, accounts, or server-side image processing. |
-| UI archetype | Tactical Telemetry & CRT Terminal | A dark editor shell fits image work and follows one visual mode consistently. |
-| App stack | React, TypeScript, Vite | Mature tooling and clear component boundaries. |
-| Cloudflare stack | Workers Static Assets with the Cloudflare Vite plugin | It deploys the SPA as a Worker without an unnecessary API layer. |
-| Interactive scene | Fabric.js behind an adapter | It provides object hit testing, grouping, transforms, vector shapes, viewport transforms, and serialization primitives. |
-| Application state | Typed document model plus Zustand UI stores | Fabric objects must not become the only source of truth. |
-| Raster state | Per-layer backing canvases outside React state | Pixel buffers are too large and mutable for React or Zustand. |
-| History | Command transactions plus raster tile patches | Full-document snapshots after every action will exhaust memory. |
-| Object Selection | Foreground extraction inside a user-drawn box or lasso | This is more useful than simple layer selection and can remain local. The engine is selected by a Phase 1 spike. |
-| Warp | Destructive 3 x 3 mesh warp on raster layers | It is testable and useful without building a full liquify system. |
-| Mobile | Not a v1 target | The required editor needs desktop pointer and keyboard interaction. |
+| Decision          | v1 choice                                              | Reason                                                                                                                  |
+| ----------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| Public URL        | `liteedit.charliepolito.com`                           | A Worker Custom Domain avoids path-prefix and routing conflicts with `charliepolito.com`.                               |
+| Processing        | Local browser only                                     | Better privacy, lower operating cost, and no upload latency.                                                            |
+| Backend storage   | None                                                   | v1 does not need KV, D1, R2, accounts, or server-side image processing.                                                 |
+| UI archetype      | Tactical Telemetry & CRT Terminal                      | A dark editor shell fits image work and follows one visual mode consistently.                                           |
+| App stack         | React, TypeScript, Vite                                | Mature tooling and clear component boundaries.                                                                          |
+| Cloudflare stack  | Workers Static Assets with the Cloudflare Vite plugin  | It deploys the SPA as a Worker without an unnecessary API layer.                                                        |
+| Interactive scene | Fabric.js behind an adapter                            | It provides object hit testing, grouping, transforms, vector shapes, viewport transforms, and serialization primitives. |
+| Application state | Typed document model plus Zustand UI stores            | Fabric objects must not become the only source of truth.                                                                |
+| Raster state      | Per-layer backing canvases outside React state         | Pixel buffers are too large and mutable for React or Zustand.                                                           |
+| History           | Command transactions plus raster tile patches          | Full-document snapshots after every action will exhaust memory.                                                         |
+| Object Selection  | Foreground extraction inside a user-drawn box or lasso | This is more useful than simple layer selection and can remain local. The engine is selected by a Phase 1 spike.        |
+| Warp              | Destructive 3 x 3 mesh warp on raster layers           | It is testable and useful without building a full liquify system.                                                       |
+| Mobile            | Not a v1 target                                        | The required editor needs desktop pointer and keyboard interaction.                                                     |
 
 Important scope assumption: “Object Selection” means foreground extraction inside a region supplied by the user. It does not mean a full semantic model that identifies every object in a scene automatically. If automatic semantic segmentation is required, treat it as a separate lazy-loaded module and reapprove the bundle and performance budgets.
 
@@ -102,11 +102,11 @@ Acceptance examples:
 
 The selection is one document-coordinate alpha mask. It is not a Fabric active object.
 
-| Tool | v1 behavior |
-| --- | --- |
-| Marquee | Drag a rectangular selection. Shift adds, Alt/Option subtracts, and Shift+Alt intersects. |
-| Lasso | Draw a freehand polygon that closes on pointer-up. Use the same mask combination modifiers. |
-| Quick Selection | Paint seed regions. A worker expands the mask through similar neighboring pixels using color distance, edge resistance, and a tolerance control. |
+| Tool             | v1 behavior                                                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Marquee          | Drag a rectangular selection. Shift adds, Alt/Option subtracts, and Shift+Alt intersects.                                                                    |
+| Lasso            | Draw a freehand polygon that closes on pointer-up. Use the same mask combination modifiers.                                                                  |
+| Quick Selection  | Paint seed regions. A worker expands the mask through similar neighboring pixels using color distance, edge resistance, and a tolerance control.             |
 | Object Selection | Draw a box or lasso around a subject. A lazy-loaded local foreground-extraction engine returns a mask for the dominant foreground object inside that region. |
 
 Required behavior:
@@ -232,17 +232,17 @@ Cloudflare is outside the editing data path. No image bytes are sent to the Work
 
 ### 5.2 Core modules
 
-| Module | Responsibility | Must not do |
-| --- | --- | --- |
-| `DocumentStore` | Layer tree, document dimensions, metadata, active IDs | Store raw pixel arrays in Zustand |
-| `RasterBufferStore` | Own per-layer canvas/bitmap buffers and dirty tiles | Render React components |
-| `RendererAdapter` | Map the document model to Fabric objects and viewport state | Become the canonical document model |
-| `ToolManager` | Activate one tool, route pointer/keyboard events, cancel safely | Directly push ad hoc history snapshots |
-| `SelectionManager` | Own the document-coordinate mask and combination operations | Use screen coordinates as stored data |
-| `HistoryManager` | Execute, undo, redo, coalesce, and evict command transactions | Snapshot the full document for every pointer move |
-| `ExportService` | Composite at document resolution and encode files | Reuse visible UI overlays |
-| `RecoveryService` | Debounced IndexedDB recovery and schema migration | Block pointer interactions |
-| Worker modules | Flood fill, segmentation, large resample, optional encoding | Read or mutate React state |
+| Module              | Responsibility                                                  | Must not do                                       |
+| ------------------- | --------------------------------------------------------------- | ------------------------------------------------- |
+| `DocumentStore`     | Layer tree, document dimensions, metadata, active IDs           | Store raw pixel arrays in Zustand                 |
+| `RasterBufferStore` | Own per-layer canvas/bitmap buffers and dirty tiles             | Render React components                           |
+| `RendererAdapter`   | Map the document model to Fabric objects and viewport state     | Become the canonical document model               |
+| `ToolManager`       | Activate one tool, route pointer/keyboard events, cancel safely | Directly push ad hoc history snapshots            |
+| `SelectionManager`  | Own the document-coordinate mask and combination operations     | Use screen coordinates as stored data             |
+| `HistoryManager`    | Execute, undo, redo, coalesce, and evict command transactions   | Snapshot the full document for every pointer move |
+| `ExportService`     | Composite at document resolution and encode files               | Reuse visible UI overlays                         |
+| `RecoveryService`   | Debounced IndexedDB recovery and schema migration               | Block pointer interactions                        |
+| Worker modules      | Flood fill, segmentation, large resample, optional encoding     | Read or mutate React state                        |
 
 ### 5.3 Model rules
 
@@ -469,16 +469,16 @@ Rules:
 
 The editor is a high-frequency tool, so most actions are instant.
 
-| Interaction | Motion |
-| --- | --- |
-| Keyboard tool switch, undo, redo, zoom shortcut | None |
-| Canvas transform, brush, crop, selection | Direct pointer tracking; no smoothing animation |
-| Pointer press on a button | 100-140 ms `transform: scale(0.97)` feedback |
-| First tooltip | 150 ms opacity/scale from 0.97 after a short delay |
-| Adjacent tooltip after one is open | Instant, no delay and no animation |
-| Popover or dropdown | 150-200 ms strong ease-out from its trigger origin |
-| Modal | 180-240 ms opacity and scale from 0.97, centered origin |
-| Panel collapse | 180-220 ms ease-in-out; animate transform or opacity, not width |
+| Interaction                                     | Motion                                                          |
+| ----------------------------------------------- | --------------------------------------------------------------- |
+| Keyboard tool switch, undo, redo, zoom shortcut | None                                                            |
+| Canvas transform, brush, crop, selection        | Direct pointer tracking; no smoothing animation                 |
+| Pointer press on a button                       | 100-140 ms `transform: scale(0.97)` feedback                    |
+| First tooltip                                   | 150 ms opacity/scale from 0.97 after a short delay              |
+| Adjacent tooltip after one is open              | Instant, no delay and no animation                              |
+| Popover or dropdown                             | 150-200 ms strong ease-out from its trigger origin              |
+| Modal                                           | 180-240 ms opacity and scale from 0.97, centered origin         |
+| Panel collapse                                  | 180-220 ms ease-in-out; animate transform or opacity, not width |
 
 Additional rules:
 
@@ -492,27 +492,27 @@ Additional rules:
 
 ### 7.4 Keyboard map
 
-| Action | Shortcut |
-| --- | --- |
-| Move | `V` |
-| Marquee | `M` |
-| Lasso | `L` |
-| Quick/Object Selection cycle | `W` |
-| Brush | `B` |
-| Shape | `U` |
-| Eraser | `E` |
-| Crop | `C` |
-| Eyedropper | `I` |
-| Hand | `H` or hold `Space` |
-| Transform | `Cmd/Ctrl+T` |
-| Undo | `Cmd/Ctrl+Z` |
-| Redo | `Cmd/Ctrl+Shift+Z` |
-| Clear selection | `Cmd/Ctrl+D` |
-| Fit | `0` |
-| 100% | `1` |
-| Zoom | `+` / `-` |
-| Commit modal tool | `Enter` |
-| Cancel current operation | `Escape` |
+| Action                       | Shortcut            |
+| ---------------------------- | ------------------- |
+| Move                         | `V`                 |
+| Marquee                      | `M`                 |
+| Lasso                        | `L`                 |
+| Quick/Object Selection cycle | `W`                 |
+| Brush                        | `B`                 |
+| Shape                        | `U`                 |
+| Eraser                       | `E`                 |
+| Crop                         | `C`                 |
+| Eyedropper                   | `I`                 |
+| Hand                         | `H` or hold `Space` |
+| Transform                    | `Cmd/Ctrl+T`        |
+| Undo                         | `Cmd/Ctrl+Z`        |
+| Redo                         | `Cmd/Ctrl+Shift+Z`  |
+| Clear selection              | `Cmd/Ctrl+D`        |
+| Fit                          | `0`                 |
+| 100%                         | `1`                 |
+| Zoom                         | `+` / `-`           |
+| Commit modal tool            | `Enter`             |
+| Cancel current operation     | `Escape`            |
 
 Do not intercept a shortcut while focus is inside a text or numeric input unless the shortcut uses Cmd/Ctrl and is explicitly safe.
 
@@ -551,14 +551,14 @@ Target configuration shape:
   "name": "liteedit",
   "compatibility_date": "YYYY-MM-DD",
   "assets": {
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
   },
   "routes": [
     {
       "pattern": "liteedit.charliepolito.com",
-      "custom_domain": true
-    }
-  ]
+      "custom_domain": true,
+    },
+  ],
 }
 ```
 
@@ -861,8 +861,8 @@ Do not work directly on `main`. Do not combine unrelated cleanup with a feature.
 
 Every UI or animation review must use one Markdown table with these columns:
 
-| Before | After | Why |
-| --- | --- | --- |
+| Before                  | After                                         | Why                                     |
+| ----------------------- | --------------------------------------------- | --------------------------------------- |
 | `transition: all 300ms` | `transition: transform 160ms var(--ease-out)` | Animate only the property that changes. |
 
 Do not provide separate “Before” and “After” lists.
@@ -946,18 +946,18 @@ Use Cloudflare's version rollback to restore the previous known-good deployment,
 
 ## 14. Risk register
 
-| Risk | Probability | Impact | Mitigation |
-| --- | --- | --- | --- |
-| Object Selection is too slow or too large | High | High | Phase 1 comparison, lazy loading, strict acceptance gate, owner decision if no approach passes. |
-| Fabric behavior diverges from the document model | Medium | High | Renderer adapter, invariant tests, model as source of truth, golden export tests. |
-| Raster history exhausts memory | High | High | Dirty-tile patches, byte accounting, transaction limits, visible memory status. |
-| Warp creates seams or destructive drift | Medium | High | Checkerboard spike, exact cancel, golden tests at high zoom. |
-| Large photos freeze the main thread | High | High | Early limits, workers, transferable buffers, progress, cancellation, stale-result rejection. |
-| Browser encoders miss target JPEG size | Medium | Medium | Bounded search, report measured size, allow dimension reduction, never promise exact bytes. |
-| CRT styling harms image judgment | Medium | High | Effects only on chrome, no overlays above canvas or color controls, neutral dark canvas surround. |
-| Keyboard shortcuts conflict with inputs/browser | Medium | Medium | Central shortcut router, focus checks, browser test matrix. |
-| Custom Domain conflicts with DNS | Low | High | Read-only DNS check before deploy; stop on conflict. |
-| Scope expands toward Photoshop parity | High | High | Feature contracts, explicit exclusions, one-issue PRs, ADR and owner approval for expansion. |
+| Risk                                             | Probability | Impact | Mitigation                                                                                        |
+| ------------------------------------------------ | ----------- | ------ | ------------------------------------------------------------------------------------------------- |
+| Object Selection is too slow or too large        | High        | High   | Phase 1 comparison, lazy loading, strict acceptance gate, owner decision if no approach passes.   |
+| Fabric behavior diverges from the document model | Medium      | High   | Renderer adapter, invariant tests, model as source of truth, golden export tests.                 |
+| Raster history exhausts memory                   | High        | High   | Dirty-tile patches, byte accounting, transaction limits, visible memory status.                   |
+| Warp creates seams or destructive drift          | Medium      | High   | Checkerboard spike, exact cancel, golden tests at high zoom.                                      |
+| Large photos freeze the main thread              | High        | High   | Early limits, workers, transferable buffers, progress, cancellation, stale-result rejection.      |
+| Browser encoders miss target JPEG size           | Medium      | Medium | Bounded search, report measured size, allow dimension reduction, never promise exact bytes.       |
+| CRT styling harms image judgment                 | Medium      | High   | Effects only on chrome, no overlays above canvas or color controls, neutral dark canvas surround. |
+| Keyboard shortcuts conflict with inputs/browser  | Medium      | Medium | Central shortcut router, focus checks, browser test matrix.                                       |
+| Custom Domain conflicts with DNS                 | Low         | High   | Read-only DNS check before deploy; stop on conflict.                                              |
+| Scope expands toward Photoshop parity            | High        | High   | Feature contracts, explicit exclusions, one-issue PRs, ADR and owner approval for expansion.      |
 
 ## 15. Reference sources
 

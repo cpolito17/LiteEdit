@@ -6,6 +6,7 @@ test("loads the local-only editor shell", async ({ page }) => {
   expect(response).not.toBeNull();
   expect(response?.headers()["content-security-policy"]).toContain("default-src 'self'");
   await expect(page).toHaveTitle("LiteEdit // Local Image Instrument");
+  await expect(page.getByText("LiteEdit", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "LOCAL IMAGE WORKBENCH" })).toBeVisible();
   await expect(
     page.getByText("LOCAL PROCESSING / IMAGE DATA DOES NOT LEAVE THIS DEVICE"),

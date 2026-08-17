@@ -22,6 +22,7 @@
   },
   "include": [
     "src",
+    "spikes",
     "vite.config.ts",
     "vite.e2e.config.ts",
     "vitest.config.ts",

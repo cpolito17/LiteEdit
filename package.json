@@ -20,6 +20,7 @@
     "deploy": "npm run verify && wrangler deploy --strict"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "fabric": "7.4.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",

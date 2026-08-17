@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import App from "./App";
@@ -19,5 +19,19 @@ describe("LiteEdit bootstrap shell", () => {
       "aria-pressed",
       "true",
     );
+  });
+
+  it("opens the new-document dialog and exposes property controls", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "NEW" }));
+    expect(screen.getByRole("dialog", { name: "NEW DOCUMENT" })).toBeVisible();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "NEW DOCUMENT" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "PROPERTIES" }));
+    expect(screen.getByRole("spinbutton", { name: "ROTATION" })).toHaveValue(0);
+    expect(screen.getByRole("slider", { name: "ZOOM" })).toHaveValue("100");
   });
 });

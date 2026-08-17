@@ -4,7 +4,7 @@ LiteEdit is a desktop-first, browser-local photo editor. The Worker serves stati
 
 ## Current status
 
-Phase 0 bootstrap is implemented. The repository currently contains the verified application shell and the toolchain required for the next gated phases. Editor behavior is intentionally not represented by disabled shell controls.
+Phase 0 bootstrap is implemented in draft PR #1. Phase 1 risk spikes are being evaluated separately. The repository currently contains the application shell and the toolchain required for gated editor work. Editor behavior is intentionally not represented by disabled shell controls.
 
 ## Development
 

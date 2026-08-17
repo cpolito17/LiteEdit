@@ -19,6 +19,11 @@ describe("LiteEdit bootstrap shell", () => {
       "aria-pressed",
       "true",
     );
+    const moveButton = screen.getByRole("button", { name: /MOVE tool/i });
+    const tooltipId = moveButton.getAttribute("aria-describedby");
+    expect(tooltipId).toBeTruthy();
+    expect(document.getElementById(tooltipId ?? "")).toHaveAttribute("role", "tooltip");
+    expect(screen.getByRole("group", { name: "LiteEdit" })).toBeVisible();
   });
 
   it("opens the new-document dialog and exposes property controls", () => {

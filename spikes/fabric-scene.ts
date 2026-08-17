@@ -13,14 +13,14 @@ export function createSpikeCanvas(element: HTMLCanvasElement): StaticCanvas {
 
 export function buildFabricScene(canvas: StaticCanvas): Group {
   const rasterPlaceholder = new Rect({
-    fill: "#303030",
+    fill: "#273239",
     height: 72,
     left: 0,
     top: 0,
     width: 96,
   });
   const vectorShape = new Rect({
-    fill: "#e61919",
+    fill: "#ff9137",
     height: 28,
     left: 18,
     top: 22,

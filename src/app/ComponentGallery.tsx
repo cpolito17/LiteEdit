@@ -27,7 +27,7 @@ export function ComponentGallery() {
     <main className="gallery-page">
       <header className="gallery-header">
         <p className="eyebrow">DEV ONLY / __GALLERY</p>
-        <h1>INDUSTRIAL UI PRIMITIVES</h1>
+        <h1>LiteEdit UI Primitives</h1>
         <p>Keyboard-ready controls for the LiteEdit editor shell.</p>
       </header>
 

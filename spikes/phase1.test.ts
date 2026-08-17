@@ -6,7 +6,7 @@ import {
   restoreFabricScene,
   serializeFabricScene,
 } from "./fabric-scene";
-import { findJpegQuality } from "./export-search";
+import { findJpegQuality, findJpegQualityAsync } from "./export-search";
 import { syncRasterSurface, type RasterImageAdapter } from "./raster-bridge";
 import {
   borderContrastCandidate,
@@ -128,6 +128,18 @@ describe("Phase 1 risk spikes", () => {
   it("finds the highest JPEG quality within a target-size tolerance", () => {
     const result = findJpegQuality({
       encodeBytes: (quality) => Math.round(200 + quality * 800),
+      targetBytes: 700,
+    });
+
+    expect(result.bytes).toBeLessThanOrEqual(700);
+    expect(result.quality).toBeGreaterThan(0.5);
+    expect(result.quality).toBeLessThan(0.7);
+    expect(result.withinTarget).toBe(true);
+  });
+
+  it("finds JPEG quality through an asynchronous encoder", async () => {
+    const result = await findJpegQualityAsync({
+      encodeBytes: async (quality) => Math.round(200 + quality * 800),
       targetBytes: 700,
     });
 

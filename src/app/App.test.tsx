@@ -8,6 +8,7 @@ describe("LiteEdit bootstrap shell", () => {
     render(<App />);
 
     expect(screen.getByRole("heading", { name: "LOCAL IMAGE WORKBENCH" })).toBeVisible();
+    expect(screen.getByText("LiteEdit", { exact: true })).toBeVisible();
     expect(
       screen.getByText("LOCAL PROCESSING / IMAGE DATA DOES NOT LEAVE THIS DEVICE"),
     ).toBeVisible();
@@ -19,6 +20,11 @@ describe("LiteEdit bootstrap shell", () => {
       "aria-pressed",
       "true",
     );
+    const moveButton = screen.getByRole("button", { name: /MOVE tool/i });
+    const tooltipId = moveButton.getAttribute("aria-describedby");
+    expect(tooltipId).toBeTruthy();
+    expect(document.getElementById(tooltipId ?? "")).toHaveAttribute("role", "tooltip");
+    expect(screen.getByRole("group", { name: "LiteEdit" })).toBeVisible();
   });
 
   it("opens the new-document dialog and exposes property controls", () => {

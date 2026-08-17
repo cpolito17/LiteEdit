@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { ComponentGallery } from "./ComponentGallery";
+import { Phase1SpikeGallery } from "./Phase1SpikeGallery";
 import { getShortcutAction } from "./shortcuts";
 import { panels, tools, type PanelId, type ToolId } from "./tool-model";
 import {
@@ -73,18 +74,22 @@ function App() {
     return <ComponentGallery />;
   }
 
+  if (import.meta.env.DEV && window.location.pathname === "/__spikes/phase1") {
+    return <Phase1SpikeGallery />;
+  }
+
   return (
     <div className="app-shell">
       <header className="command-bar">
-        <div className="brand-lockup" aria-label="LiteEdit">
+        <div className="brand-lockup" role="group" aria-label="LiteEdit">
           <span className="brand-mark" aria-hidden="true">
             LE
           </span>
-          <span className="brand-name">LITEEDIT</span>
-          <span className="brand-version">V0.2 / INDUSTRIAL SHELL</span>
+          <span className="brand-name">LiteEdit</span>
+          <span className="brand-version">V0.2 / TECHNICAL SHELL</span>
         </div>
 
-        <div className="command-actions" aria-label="Document commands">
+        <div className="command-actions" role="group" aria-label="Document commands">
           <UiButton className="command-button" disabled>
             OPEN
           </UiButton>
@@ -133,7 +138,7 @@ function App() {
               </Tooltip>
             ))}
           </div>
-          <div className="rail-footer" aria-label="Foreground and background colors">
+          <div className="rail-footer" role="group" aria-label="Foreground and background colors">
             <span className="color-chip color-chip-foreground" title="Foreground color" />
             <span className="color-chip color-chip-background" title="Background color" />
           </div>

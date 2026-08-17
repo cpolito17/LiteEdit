@@ -10,7 +10,7 @@ Primary audience: an expert junior developer working through small reviewed pull
 
 Build a fast, desktop-first photo editor that runs entirely in the browser. LiteEdit must support the required editing workflow without uploading the user's images to a server. Cloudflare serves the application files. All image decoding, editing, history, and export run on the user's device.
 
-The product should feel like a precise industrial instrument. It should not imitate Photoshop's full surface area. Each tool must have a narrow, predictable contract and good defaults.
+The product should feel like a precise creative workspace with a calm technical character. It should not imitate Photoshop's full surface area. Each tool must have a narrow, predictable contract and good defaults.
 
 ### v1 success condition
 
@@ -22,21 +22,21 @@ This is not a small canvas demo. Warp, raster selections, brush history, and obj
 
 ## 2. Decisions and assumptions
 
-| Decision | v1 choice | Reason |
-| --- | --- | --- |
-| Public URL | `liteedit.charliepolito.com` | A Worker Custom Domain avoids path-prefix and routing conflicts with `charliepolito.com`. |
-| Processing | Local browser only | Better privacy, lower operating cost, and no upload latency. |
-| Backend storage | None | v1 does not need KV, D1, R2, accounts, or server-side image processing. |
-| UI archetype | Tactical Telemetry & CRT Terminal | A dark editor shell fits image work and follows one visual mode consistently. |
-| App stack | React, TypeScript, Vite | Mature tooling and clear component boundaries. |
-| Cloudflare stack | Workers Static Assets with the Cloudflare Vite plugin | It deploys the SPA as a Worker without an unnecessary API layer. |
-| Interactive scene | Fabric.js behind an adapter | It provides object hit testing, grouping, transforms, vector shapes, viewport transforms, and serialization primitives. |
-| Application state | Typed document model plus Zustand UI stores | Fabric objects must not become the only source of truth. |
-| Raster state | Per-layer backing canvases outside React state | Pixel buffers are too large and mutable for React or Zustand. |
-| History | Command transactions plus raster tile patches | Full-document snapshots after every action will exhaust memory. |
-| Object Selection | Foreground extraction inside a user-drawn box or lasso | This is more useful than simple layer selection and can remain local. The engine is selected by a Phase 1 spike. |
-| Warp | Destructive 3 x 3 mesh warp on raster layers | It is testable and useful without building a full liquify system. |
-| Mobile | Not a v1 target | The required editor needs desktop pointer and keyboard interaction. |
+| Decision          | v1 choice                                              | Reason                                                                                                                  |
+| ----------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| Public URL        | `liteedit.charliepolito.com`                           | A Worker Custom Domain avoids path-prefix and routing conflicts with `charliepolito.com`.                               |
+| Processing        | Local browser only                                     | Better privacy, lower operating cost, and no upload latency.                                                            |
+| Backend storage   | None                                                   | v1 does not need KV, D1, R2, accounts, or server-side image processing.                                                 |
+| UI archetype      | Tactical Telemetry & CRT Terminal                      | A dark editor shell fits image work and follows one visual mode consistently.                                           |
+| App stack         | React, TypeScript, Vite                                | Mature tooling and clear component boundaries.                                                                          |
+| Cloudflare stack  | Workers Static Assets with the Cloudflare Vite plugin  | It deploys the SPA as a Worker without an unnecessary API layer.                                                        |
+| Interactive scene | Fabric.js behind an adapter                            | It provides object hit testing, grouping, transforms, vector shapes, viewport transforms, and serialization primitives. |
+| Application state | Typed document model plus Zustand UI stores            | Fabric objects must not become the only source of truth.                                                                |
+| Raster state      | Per-layer backing canvases outside React state         | Pixel buffers are too large and mutable for React or Zustand.                                                           |
+| History           | Command transactions plus raster tile patches          | Full-document snapshots after every action will exhaust memory.                                                         |
+| Object Selection  | Foreground extraction inside a user-drawn box or lasso | This is more useful than simple layer selection and can remain local. The engine is selected by a Phase 1 spike.        |
+| Warp              | Destructive 3 x 3 mesh warp on raster layers           | It is testable and useful without building a full liquify system.                                                       |
+| Mobile            | Not a v1 target                                        | The required editor needs desktop pointer and keyboard interaction.                                                     |
 
 Important scope assumption: “Object Selection” means foreground extraction inside a region supplied by the user. It does not mean a full semantic model that identifies every object in a scene automatically. If automatic semantic segmentation is required, treat it as a separate lazy-loaded module and reapprove the bundle and performance budgets.
 
@@ -102,11 +102,11 @@ Acceptance examples:
 
 The selection is one document-coordinate alpha mask. It is not a Fabric active object.
 
-| Tool | v1 behavior |
-| --- | --- |
-| Marquee | Drag a rectangular selection. Shift adds, Alt/Option subtracts, and Shift+Alt intersects. |
-| Lasso | Draw a freehand polygon that closes on pointer-up. Use the same mask combination modifiers. |
-| Quick Selection | Paint seed regions. A worker expands the mask through similar neighboring pixels using color distance, edge resistance, and a tolerance control. |
+| Tool             | v1 behavior                                                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Marquee          | Drag a rectangular selection. Shift adds, Alt/Option subtracts, and Shift+Alt intersects.                                                                    |
+| Lasso            | Draw a freehand polygon that closes on pointer-up. Use the same mask combination modifiers.                                                                  |
+| Quick Selection  | Paint seed regions. A worker expands the mask through similar neighboring pixels using color distance, edge resistance, and a tolerance control.             |
 | Object Selection | Draw a box or lasso around a subject. A lazy-loaded local foreground-extraction engine returns a mask for the dominant foreground object inside that region. |
 
 Required behavior:
@@ -232,17 +232,17 @@ Cloudflare is outside the editing data path. No image bytes are sent to the Work
 
 ### 5.2 Core modules
 
-| Module | Responsibility | Must not do |
-| --- | --- | --- |
-| `DocumentStore` | Layer tree, document dimensions, metadata, active IDs | Store raw pixel arrays in Zustand |
-| `RasterBufferStore` | Own per-layer canvas/bitmap buffers and dirty tiles | Render React components |
-| `RendererAdapter` | Map the document model to Fabric objects and viewport state | Become the canonical document model |
-| `ToolManager` | Activate one tool, route pointer/keyboard events, cancel safely | Directly push ad hoc history snapshots |
-| `SelectionManager` | Own the document-coordinate mask and combination operations | Use screen coordinates as stored data |
-| `HistoryManager` | Execute, undo, redo, coalesce, and evict command transactions | Snapshot the full document for every pointer move |
-| `ExportService` | Composite at document resolution and encode files | Reuse visible UI overlays |
-| `RecoveryService` | Debounced IndexedDB recovery and schema migration | Block pointer interactions |
-| Worker modules | Flood fill, segmentation, large resample, optional encoding | Read or mutate React state |
+| Module              | Responsibility                                                  | Must not do                                       |
+| ------------------- | --------------------------------------------------------------- | ------------------------------------------------- |
+| `DocumentStore`     | Layer tree, document dimensions, metadata, active IDs           | Store raw pixel arrays in Zustand                 |
+| `RasterBufferStore` | Own per-layer canvas/bitmap buffers and dirty tiles             | Render React components                           |
+| `RendererAdapter`   | Map the document model to Fabric objects and viewport state     | Become the canonical document model               |
+| `ToolManager`       | Activate one tool, route pointer/keyboard events, cancel safely | Directly push ad hoc history snapshots            |
+| `SelectionManager`  | Own the document-coordinate mask and combination operations     | Use screen coordinates as stored data             |
+| `HistoryManager`    | Execute, undo, redo, coalesce, and evict command transactions   | Snapshot the full document for every pointer move |
+| `ExportService`     | Composite at document resolution and encode files               | Reuse visible UI overlays                         |
+| `RecoveryService`   | Debounced IndexedDB recovery and schema migration               | Block pointer interactions                        |
+| Worker modules      | Flood fill, segmentation, large resample, optional encoding     | Read or mutate React state                        |
 
 ### 5.3 Model rules
 
@@ -434,34 +434,42 @@ Use a deterministic CSS Grid shell:
 
 At widths below 1024 px, show an “unsupported workspace size” message with an option to continue. Do not silently collapse the editor into an unusable mobile layout.
 
-### 7.2 Tactical Telemetry visual system
+### 7.2 Soft Technical visual system
 
-Use only the dark archetype.
+Use a dark, low-glare workspace with clear visual hierarchy. Keep the technical structure, but soften it with readable typography, modest corner radii, restrained shadows, and a four-color accent system.
 
 ```css
 :root {
-  --surface-0: #0a0a0a;
-  --surface-1: #121212;
-  --surface-2: #1a1a1a;
-  --ink: #eaeaea;
-  --ink-muted: #9b9b96;
-  --line: #3a3a36;
-  --hazard: #e61919;
-  --status-ok: #4af626;
-  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --surface-0: #0d1215;
+  --surface-1: #151b1f;
+  --surface-2: #1d252a;
+  --surface-3: #273239;
+  --ink: #f1f5f2;
+  --ink-muted: #aebbb6;
+  --ink-dim: #82918b;
+  --line: #344149;
+  --line-strong: #52636a;
+  --accent-mint: #70ffd2;
+  --accent-lemon: #fffc8c;
+  --accent-gold: #ffcc4d;
+  --accent-orange: #ff9137;
+  --accent-ink: #101719;
+  --status-ok: var(--accent-mint);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
 }
 ```
 
 Rules:
 
 - Use IBM Plex Mono or a comparable self-hosted monospace for controls and telemetry.
-- Use Inter Black or a comparable self-hosted heavy sans only for the empty-state title, modal titles, and rare macro labels.
-- Use uppercase labels at 10-14 px with 0.05-0.1em tracking.
-- Use 1 px grid lines and square corners. Never use `border-radius`.
-- Red is the only general accent. Use terminal green only for the local `SAVED` indicator.
-- Do not use gradients, glass effects, soft shadows, or translucent cards.
-- Restrict scanlines and noise to low-opacity UI chrome. Never place them over the actual image, color picker, histogram-like data, or export preview.
+- Use a humanist sans-serif stack for the `LiteEdit` wordmark, empty-state title, modal titles, and rare macro labels.
+- Use uppercase labels at 10-14 px with 0.05-0.1em tracking only where they improve scanning. Do not force uppercase on the product name or tool names.
+- Use 1 px separators and the deterministic canvas grid. Use 6-14 px corner radii on controls, cards, dialogs, and empty states.
+- Use the accents by role: mint for primary action and healthy local status, lemon for focus and selected values, gold for labels and secondary emphasis, and orange for warnings or destructive actions.
+- Do not use gradients, glass effects, heavy hard-edged shadows, or translucent cards. A low-contrast soft shadow is allowed on elevated cards and dialogs.
+- Restrict decorative grid detail to low-contrast UI chrome. Never place it over the actual image, color picker, histogram-like data, or export preview.
 - Use crosshairs and ASCII markers only when they communicate coordinates, state, direction, or grouping.
 - Do not let decorative telemetry compete with tool names or numeric controls.
 
@@ -469,16 +477,16 @@ Rules:
 
 The editor is a high-frequency tool, so most actions are instant.
 
-| Interaction | Motion |
-| --- | --- |
-| Keyboard tool switch, undo, redo, zoom shortcut | None |
-| Canvas transform, brush, crop, selection | Direct pointer tracking; no smoothing animation |
-| Pointer press on a button | 100-140 ms `transform: scale(0.97)` feedback |
-| First tooltip | 150 ms opacity/scale from 0.97 after a short delay |
-| Adjacent tooltip after one is open | Instant, no delay and no animation |
-| Popover or dropdown | 150-200 ms strong ease-out from its trigger origin |
-| Modal | 180-240 ms opacity and scale from 0.97, centered origin |
-| Panel collapse | 180-220 ms ease-in-out; animate transform or opacity, not width |
+| Interaction                                     | Motion                                                          |
+| ----------------------------------------------- | --------------------------------------------------------------- |
+| Keyboard tool switch, undo, redo, zoom shortcut | None                                                            |
+| Canvas transform, brush, crop, selection        | Direct pointer tracking; no smoothing animation                 |
+| Pointer press on a button                       | 100-140 ms `transform: scale(0.97)` feedback                    |
+| First tooltip                                   | 150 ms opacity/scale from 0.97 after a short delay              |
+| Adjacent tooltip after one is open              | Instant, no delay and no animation                              |
+| Popover or dropdown                             | 150-200 ms strong ease-out from its trigger origin              |
+| Modal                                           | 180-240 ms opacity and scale from 0.97, centered origin         |
+| Panel collapse                                  | 180-220 ms ease-in-out; animate transform or opacity, not width |
 
 Additional rules:
 
@@ -492,27 +500,27 @@ Additional rules:
 
 ### 7.4 Keyboard map
 
-| Action | Shortcut |
-| --- | --- |
-| Move | `V` |
-| Marquee | `M` |
-| Lasso | `L` |
-| Quick/Object Selection cycle | `W` |
-| Brush | `B` |
-| Shape | `U` |
-| Eraser | `E` |
-| Crop | `C` |
-| Eyedropper | `I` |
-| Hand | `H` or hold `Space` |
-| Transform | `Cmd/Ctrl+T` |
-| Undo | `Cmd/Ctrl+Z` |
-| Redo | `Cmd/Ctrl+Shift+Z` |
-| Clear selection | `Cmd/Ctrl+D` |
-| Fit | `0` |
-| 100% | `1` |
-| Zoom | `+` / `-` |
-| Commit modal tool | `Enter` |
-| Cancel current operation | `Escape` |
+| Action                       | Shortcut            |
+| ---------------------------- | ------------------- |
+| Move                         | `V`                 |
+| Marquee                      | `M`                 |
+| Lasso                        | `L`                 |
+| Quick/Object Selection cycle | `W`                 |
+| Brush                        | `B`                 |
+| Shape                        | `U`                 |
+| Eraser                       | `E`                 |
+| Crop                         | `C`                 |
+| Eyedropper                   | `I`                 |
+| Hand                         | `H` or hold `Space` |
+| Transform                    | `Cmd/Ctrl+T`        |
+| Undo                         | `Cmd/Ctrl+Z`        |
+| Redo                         | `Cmd/Ctrl+Shift+Z`  |
+| Clear selection              | `Cmd/Ctrl+D`        |
+| Fit                          | `0`                 |
+| 100%                         | `1`                 |
+| Zoom                         | `+` / `-`           |
+| Commit modal tool            | `Enter`             |
+| Cancel current operation     | `Escape`            |
 
 Do not intercept a shortcut while focus is inside a text or numeric input unless the shortcut uses Cmd/Ctrl and is explicitly safe.
 
@@ -551,14 +559,14 @@ Target configuration shape:
   "name": "liteedit",
   "compatibility_date": "YYYY-MM-DD",
   "assets": {
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
   },
   "routes": [
     {
       "pattern": "liteedit.charliepolito.com",
-      "custom_domain": true
-    }
-  ]
+      "custom_domain": true,
+    },
+  ],
 }
 ```
 
@@ -612,7 +620,7 @@ Gate:
 - The selected architecture stays within the initial bundle budget because advanced selection code is lazy-loaded.
 - Any failed gate is escalated. Do not hide it behind a simplified UI.
 
-### Phase 2 - Industrial shell and component primitives
+### Phase 2 - Technical shell and component primitives
 
 Deliverables:
 
@@ -625,7 +633,7 @@ Deliverables:
 Gate:
 
 - Shell works at 1024 x 768, 1440 x 900, and 1920 x 1080.
-- No rounded corners, gradients, external fonts, or effects over the canvas zone.
+- Modest corner radii, no gradients, no external fonts, and no decorative effects over the canvas zone.
 - Axe reports no serious or critical violations in the shell.
 - Review all UI changes with the required table format in Section 10.
 
@@ -861,8 +869,8 @@ Do not work directly on `main`. Do not combine unrelated cleanup with a feature.
 
 Every UI or animation review must use one Markdown table with these columns:
 
-| Before | After | Why |
-| --- | --- | --- |
+| Before                  | After                                         | Why                                     |
+| ----------------------- | --------------------------------------------- | --------------------------------------- |
 | `transition: all 300ms` | `transition: transform 160ms var(--ease-out)` | Animate only the property that changes. |
 
 Do not provide separate “Before” and “After” lists.
@@ -946,18 +954,18 @@ Use Cloudflare's version rollback to restore the previous known-good deployment,
 
 ## 14. Risk register
 
-| Risk | Probability | Impact | Mitigation |
-| --- | --- | --- | --- |
-| Object Selection is too slow or too large | High | High | Phase 1 comparison, lazy loading, strict acceptance gate, owner decision if no approach passes. |
-| Fabric behavior diverges from the document model | Medium | High | Renderer adapter, invariant tests, model as source of truth, golden export tests. |
-| Raster history exhausts memory | High | High | Dirty-tile patches, byte accounting, transaction limits, visible memory status. |
-| Warp creates seams or destructive drift | Medium | High | Checkerboard spike, exact cancel, golden tests at high zoom. |
-| Large photos freeze the main thread | High | High | Early limits, workers, transferable buffers, progress, cancellation, stale-result rejection. |
-| Browser encoders miss target JPEG size | Medium | Medium | Bounded search, report measured size, allow dimension reduction, never promise exact bytes. |
-| CRT styling harms image judgment | Medium | High | Effects only on chrome, no overlays above canvas or color controls, neutral dark canvas surround. |
-| Keyboard shortcuts conflict with inputs/browser | Medium | Medium | Central shortcut router, focus checks, browser test matrix. |
-| Custom Domain conflicts with DNS | Low | High | Read-only DNS check before deploy; stop on conflict. |
-| Scope expands toward Photoshop parity | High | High | Feature contracts, explicit exclusions, one-issue PRs, ADR and owner approval for expansion. |
+| Risk                                             | Probability | Impact | Mitigation                                                                                        |
+| ------------------------------------------------ | ----------- | ------ | ------------------------------------------------------------------------------------------------- |
+| Object Selection is too slow or too large        | High        | High   | Phase 1 comparison, lazy loading, strict acceptance gate, owner decision if no approach passes.   |
+| Fabric behavior diverges from the document model | Medium      | High   | Renderer adapter, invariant tests, model as source of truth, golden export tests.                 |
+| Raster history exhausts memory                   | High        | High   | Dirty-tile patches, byte accounting, transaction limits, visible memory status.                   |
+| Warp creates seams or destructive drift          | Medium      | High   | Checkerboard spike, exact cancel, golden tests at high zoom.                                      |
+| Large photos freeze the main thread              | High        | High   | Early limits, workers, transferable buffers, progress, cancellation, stale-result rejection.      |
+| Browser encoders miss target JPEG size           | Medium      | Medium | Bounded search, report measured size, allow dimension reduction, never promise exact bytes.       |
+| CRT styling harms image judgment                 | Medium      | High   | Effects only on chrome, no overlays above canvas or color controls, neutral dark canvas surround. |
+| Keyboard shortcuts conflict with inputs/browser  | Medium      | Medium | Central shortcut router, focus checks, browser test matrix.                                       |
+| Custom Domain conflicts with DNS                 | Low         | High   | Read-only DNS check before deploy; stop on conflict.                                              |
+| Scope expands toward Photoshop parity            | High        | High   | Feature contracts, explicit exclusions, one-issue PRs, ADR and owner approval for expansion.      |
 
 ## 15. Reference sources
 

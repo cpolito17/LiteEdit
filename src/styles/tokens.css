@@ -1,0 +1,21 @@
+:root {
+  --surface-0: #0a0a0a;
+  --surface-1: #121212;
+  --surface-2: #1a1a1a;
+  --surface-3: #232323;
+  --ink: #eaeaea;
+  --ink-muted: #9b9b96;
+  --ink-dim: #64645f;
+  --line: #3a3a36;
+  --line-strong: #65655f;
+  --hazard: #e61919;
+  --status-ok: #4af626;
+  --canvas: #101010;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  color: var(--ink);
+  background: var(--surface-0);
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}

@@ -4,7 +4,7 @@ LiteEdit is a desktop-first, browser-local photo editor. The Worker serves stati
 
 ## Current status
 
-Phase 0 through Phase 2 are merged into `main`. The current application provides the accessible industrial shell, local font assets, keyboard shortcut routing, reusable UI primitives, a development-only component gallery, and a development-only real-browser Phase 1 spike harness. The Fabric, raster, warp, history, and JPEG harnesses now require manual confirmation. Object Selection remains gated on five approved photos and a second local segmentation candidate.
+Phase 0 through Phase 2 are merged into `main`. The current application provides the accessible technical shell, local font assets, keyboard shortcut routing, reusable UI primitives, a development-only component gallery, and a development-only real-browser Phase 1 spike harness. The Fabric, raster, warp, history, and JPEG harnesses now require manual confirmation. Object Selection remains gated on five approved photos and a second local segmentation candidate.
 
 ## Development
 
@@ -29,4 +29,4 @@ Use Node `24.19.0` for local development. Do not commit `.env`, `.dev.vars`, cre
 
 The production target is `https://liteedit.charliepolito.com`. Cloudflare Workers Static Assets serves the built SPA. v1 has no API, database, object storage, account system, or server-side image processing.
 
-See [the build plan](BUILD_PLAN.md), [architecture notes](docs/architecture.md), and [deployment runbook](docs/deployment.md).
+See [the build plan](BUILD_PLAN.md), [design system](docs/design-system.md), [architecture notes](docs/architecture.md), and [deployment runbook](docs/deployment.md).

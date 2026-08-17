@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "chore/**", "feat/**", "fix/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify source and build
+        run: npm run verify
+
+      - name: Validate Cloudflare dry run
+        run: npm run cf:dry-run
+
+      - name: Install Chromium for end-to-end smoke test
+        run: npx playwright install --with-deps chromium
+
+      - name: Run end-to-end smoke test
+        run: npm run test:e2e

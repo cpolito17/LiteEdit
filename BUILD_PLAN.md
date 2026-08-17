@@ -10,7 +10,7 @@ Primary audience: an expert junior developer working through small reviewed pull
 
 Build a fast, desktop-first photo editor that runs entirely in the browser. LiteEdit must support the required editing workflow without uploading the user's images to a server. Cloudflare serves the application files. All image decoding, editing, history, and export run on the user's device.
 
-The product should feel like a precise industrial instrument. It should not imitate Photoshop's full surface area. Each tool must have a narrow, predictable contract and good defaults.
+The product should feel like a precise creative workspace with a calm technical character. It should not imitate Photoshop's full surface area. Each tool must have a narrow, predictable contract and good defaults.
 
 ### v1 success condition
 
@@ -434,34 +434,42 @@ Use a deterministic CSS Grid shell:
 
 At widths below 1024 px, show an “unsupported workspace size” message with an option to continue. Do not silently collapse the editor into an unusable mobile layout.
 
-### 7.2 Tactical Telemetry visual system
+### 7.2 Soft Technical visual system
 
-Use only the dark archetype.
+Use a dark, low-glare workspace with clear visual hierarchy. Keep the technical structure, but soften it with readable typography, modest corner radii, restrained shadows, and a four-color accent system.
 
 ```css
 :root {
-  --surface-0: #0a0a0a;
-  --surface-1: #121212;
-  --surface-2: #1a1a1a;
-  --ink: #eaeaea;
-  --ink-muted: #9b9b96;
-  --line: #3a3a36;
-  --hazard: #e61919;
-  --status-ok: #4af626;
-  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --surface-0: #0d1215;
+  --surface-1: #151b1f;
+  --surface-2: #1d252a;
+  --surface-3: #273239;
+  --ink: #f1f5f2;
+  --ink-muted: #aebbb6;
+  --ink-dim: #82918b;
+  --line: #344149;
+  --line-strong: #52636a;
+  --accent-mint: #70ffd2;
+  --accent-lemon: #fffc8c;
+  --accent-gold: #ffcc4d;
+  --accent-orange: #ff9137;
+  --accent-ink: #101719;
+  --status-ok: var(--accent-mint);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
 }
 ```
 
 Rules:
 
 - Use IBM Plex Mono or a comparable self-hosted monospace for controls and telemetry.
-- Use Inter Black or a comparable self-hosted heavy sans only for the empty-state title, modal titles, and rare macro labels.
-- Use uppercase labels at 10-14 px with 0.05-0.1em tracking.
-- Use 1 px grid lines and square corners. Never use `border-radius`.
-- Red is the only general accent. Use terminal green only for the local `SAVED` indicator.
-- Do not use gradients, glass effects, soft shadows, or translucent cards.
-- Restrict scanlines and noise to low-opacity UI chrome. Never place them over the actual image, color picker, histogram-like data, or export preview.
+- Use a humanist sans-serif stack for the `LiteEdit` wordmark, empty-state title, modal titles, and rare macro labels.
+- Use uppercase labels at 10-14 px with 0.05-0.1em tracking only where they improve scanning. Do not force uppercase on the product name or tool names.
+- Use 1 px separators and the deterministic canvas grid. Use 6-14 px corner radii on controls, cards, dialogs, and empty states.
+- Use the accents by role: mint for primary action and healthy local status, lemon for focus and selected values, gold for labels and secondary emphasis, and orange for warnings or destructive actions.
+- Do not use gradients, glass effects, heavy hard-edged shadows, or translucent cards. A low-contrast soft shadow is allowed on elevated cards and dialogs.
+- Restrict decorative grid detail to low-contrast UI chrome. Never place it over the actual image, color picker, histogram-like data, or export preview.
 - Use crosshairs and ASCII markers only when they communicate coordinates, state, direction, or grouping.
 - Do not let decorative telemetry compete with tool names or numeric controls.
 
@@ -612,7 +620,7 @@ Gate:
 - The selected architecture stays within the initial bundle budget because advanced selection code is lazy-loaded.
 - Any failed gate is escalated. Do not hide it behind a simplified UI.
 
-### Phase 2 - Industrial shell and component primitives
+### Phase 2 - Technical shell and component primitives
 
 Deliverables:
 
@@ -625,7 +633,7 @@ Deliverables:
 Gate:
 
 - Shell works at 1024 x 768, 1440 x 900, and 1920 x 1080.
-- No rounded corners, gradients, external fonts, or effects over the canvas zone.
+- Modest corner radii, no gradients, no external fonts, and no decorative effects over the canvas zone.
 - Axe reports no serious or critical violations in the shell.
 - Review all UI changes with the required table format in Section 10.
 

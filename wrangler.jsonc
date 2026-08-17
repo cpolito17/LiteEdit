@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "liteedit",
+  "compatibility_date": "2026-08-17",
+  "assets": {
+    "not_found_handling": "single-page-application",
+  },
+  "routes": [
+    {
+      "pattern": "liteedit.charliepolito.com",
+      "custom_domain": true,
+    },
+  ],
+}

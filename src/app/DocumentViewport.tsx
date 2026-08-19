@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { DocumentModel } from "../editor/document-model";
-import type { DocumentSource } from "../editor/renderer/fabric-adapter";
-import { FabricRendererAdapter } from "../editor/renderer/fabric-adapter";
+import type { DocumentModel, LayerId } from "../editor/document-model";
+import { FabricRendererAdapter, type DocumentSources } from "../editor/renderer/fabric-adapter";
 import {
   clampZoom,
   fitDocumentInViewport,
@@ -17,11 +16,12 @@ import { UiButton } from "../components/primitives/Ui";
 
 type DocumentViewportProps = {
   model: DocumentModel;
-  source: DocumentSource;
+  sources: DocumentSources;
   activeTool: ToolId;
   zoomPercent: number;
   onZoomChange: (value: number) => void;
   onPointerPosition: (point: Point | null) => void;
+  onActiveLayerChange: (layerId: LayerId) => void;
   onStatus: (message: string) => void;
   onExportReady: (handler: (() => void) | null) => void;
 };
@@ -54,23 +54,34 @@ function downloadDataUrl(dataUrl: string, filename: string): void {
 
 export function DocumentViewport({
   model,
-  source,
+  sources,
   activeTool,
   zoomPercent,
   onZoomChange,
   onPointerPosition,
+  onActiveLayerChange,
   onStatus,
   onExportReady,
 }: DocumentViewportProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const adapterRef = useRef<FabricRendererAdapter | null>(null);
+  const modelRef = useRef(model);
+  const sourcesRef = useRef(sources);
+  const activeLayerHandlerRef = useRef(onActiveLayerChange);
+  const statusHandlerRef = useRef(onStatus);
   const transformRef = useRef<ViewportTransform>([1, 0, 0, 1, 0, 0]);
+  const documentIdRef = useRef<string | null>(null);
   const panRef = useRef<PanState | null>(null);
   const spacePressedRef = useRef(false);
   const skipZoomEffectRef = useRef(false);
   const [isPanning, setIsPanning] = useState(false);
   const [spacePressed, setSpacePressed] = useState(false);
+
+  modelRef.current = model;
+  sourcesRef.current = sources;
+  activeLayerHandlerRef.current = onActiveLayerChange;
+  statusHandlerRef.current = onStatus;
 
   const applyTransform = useCallback((transform: ViewportTransform) => {
     transformRef.current = transform;
@@ -80,11 +91,12 @@ export function DocumentViewport({
   const fitToViewport = useCallback(
     (announce = true) => {
       const viewport = viewportRef.current;
+      const currentModel = modelRef.current;
       if (!viewport) {
         return;
       }
 
-      const next = fitDocumentInViewport(model, {
+      const next = fitDocumentInViewport(currentModel, {
         width: viewport.clientWidth,
         height: viewport.clientHeight,
       });
@@ -92,10 +104,10 @@ export function DocumentViewport({
       skipZoomEffectRef.current = true;
       onZoomChange(Math.round(next[0] * 100));
       if (announce) {
-        onStatus(`VIEW / FIT ${Math.round(next[0] * 100)}%`);
+        statusHandlerRef.current(`VIEW / FIT ${Math.round(next[0] * 100)}%`);
       }
     },
-    [applyTransform, model, onStatus, onZoomChange],
+    [applyTransform, onZoomChange],
   );
 
   useEffect(() => {
@@ -107,26 +119,18 @@ export function DocumentViewport({
 
     const adapter = new FabricRendererAdapter(canvas);
     adapterRef.current = adapter;
-    adapter.setDocumentSource(source, model);
+    adapter.setActiveLayerHandler((layerId) => activeLayerHandlerRef.current(layerId));
 
     const resize = () => {
       adapter.setViewportSize(viewport.clientWidth, viewport.clientHeight);
-      if (transformRef.current[4] === 0 && transformRef.current[5] === 0) {
-        const next = fitDocumentInViewport(model, {
-          width: viewport.clientWidth,
-          height: viewport.clientHeight,
-        });
-        applyTransform(next);
-        skipZoomEffectRef.current = true;
-        onZoomChange(Math.round(next[0] * 100));
+      if (documentIdRef.current === null) {
+        fitToViewport(false);
       } else {
         adapter.setViewportTransform(transformRef.current);
       }
     };
 
-    transformRef.current = [1, 0, 0, 1, 0, 0];
     resize();
-
     const resizeObserver =
       typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
     resizeObserver?.observe(viewport);
@@ -135,9 +139,10 @@ export function DocumentViewport({
     }
 
     const exportHandler = () => {
-      const dataUrl = adapter.exportPng();
-      downloadDataUrl(dataUrl, `${model.name || "Untitled"}-edited.png`);
-      onStatus("EXPORT / PNG READY");
+      const currentModel = modelRef.current;
+      const dataUrl = adapter.exportPng(currentModel, sourcesRef.current);
+      downloadDataUrl(dataUrl, `${currentModel.name || "Untitled"}-edited.png`);
+      statusHandlerRef.current("EXPORT / PNG READY");
     };
     onExportReady(exportHandler);
 
@@ -150,7 +155,30 @@ export function DocumentViewport({
       adapterRef.current = null;
       void adapter.dispose();
     };
-  }, [applyTransform, model, onExportReady, onStatus, onZoomChange, source]);
+  }, [fitToViewport, onExportReady]);
+
+  useEffect(() => {
+    const adapter = adapterRef.current;
+    if (!adapter) {
+      return;
+    }
+    const changedDocument = documentIdRef.current !== model.id;
+    documentIdRef.current = model.id;
+    adapter.setDocument(model, sources);
+    if (changedDocument) {
+      transformRef.current = [1, 0, 0, 1, 0, 0];
+      fitToViewport(false);
+    } else {
+      adapter.setViewportTransform(transformRef.current);
+    }
+  }, [fitToViewport, model, sources]);
+
+  useEffect(() => {
+    adapterRef.current?.setInteractionEnabled(activeTool === "move");
+    if (activeTool === "move") {
+      adapterRef.current?.setActiveLayer(model.activeLayerId);
+    }
+  }, [activeTool, model.activeLayerId]);
 
   useEffect(() => {
     if (skipZoomEffectRef.current) {
@@ -322,7 +350,6 @@ export function DocumentViewport({
   };
 
   const isHandMode = activeTool === "hand" || spacePressed;
-  const zoomLabel = `${zoomPercent}%`;
 
   return (
     <div
@@ -355,7 +382,7 @@ export function DocumentViewport({
           100%
         </UiButton>
         <span className="viewport-zoom-label" aria-live="polite">
-          {zoomLabel}
+          {zoomPercent}%
         </span>
       </div>
     </div>

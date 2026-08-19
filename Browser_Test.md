@@ -1,6 +1,6 @@
 # LiteEdit Browser Test Plan
 
-This document covers the browser checks for the merged Phase 0-3 work, the Phase 1 technical gate, and the Phase 3 local document workflow.
+This document covers the browser checks for the implemented Phase 0-4 work, the unresolved Phase 1 technical gate, the Phase 3 local document workflow, and Phase 4 layers and structural history.
 
 Do not mark a check as `PASS` when the feature is only covered by a jsdom or unit test. Use `BLOCKED` when the required browser or test harness is not available.
 
@@ -65,9 +65,9 @@ Run each check at `1024 x 768`, `1440 x 900`, and `1920 x 1080`.
 | SHELL-02 | Inspect the canvas zone and all shell surfaces.   | The canvas uses a deterministic low-contrast square grid. The shell uses modest corner radii and soft elevation where appropriate. It has no CSS gradients, scanline overlay, or animated visual effect. |
 | SHELL-03 | Inspect the top command bar.                      | LiteEdit branding, `OPEN`, `EXPORT`, `UNDO`, `NEW`, and `LOCAL / READY` are visible. `OPEN` and `NEW` are enabled. `EXPORT` and `UNDO` are disabled until a document is loaded.                          |
 | SHELL-04 | Inspect the left tool rail.                       | All ten tools are visible: Move, Marquee, Lasso, Select, Brush, Shape, Eraser, Crop, Picker, and Hand. Each is a button with an accessible name, shortcut text, visible focus state, and `aria-pressed`. |
-| SHELL-05 | Inspect the empty canvas state.                   | `LOCAL IMAGE WORKBENCH`, the no-document message, the local-processing notice, viewport rulers, and zoom status are visible. `OPEN IMAGE // PHASE 3` is enabled.                                         |
+| SHELL-05 | Inspect the empty canvas state.                   | `LOCAL IMAGE WORKBENCH`, the no-document message, the local-processing notice, viewport rulers, and zoom status are visible. `OPEN IMAGE // LOCAL` is enabled.                                           |
 | SHELL-06 | Inspect the right inspector.                      | The four tabs `LAYERS`, `HISTORY`, `PROPERTIES`, and `SWATCHES` are visible. The active tab is clear without relying on color alone.                                                                     |
-| SHELL-07 | Inspect the bottom status bar.                    | Document, size, pointer, active-tool, and `BUILD / PHASE 3` status text are visible and readable.                                                                                                        |
+| SHELL-07 | Inspect the bottom status bar.                    | Document, size, pointer, active-tool, history, and `BUILD / PHASE 4` status text are visible and readable.                                                                                               |
 | SHELL-08 | Inspect the shell at normal and high-DPI scaling. | Text remains legible. Controls remain at least 32 px high where applicable. No control overlaps another.                                                                                                 |
 
 ## 4. Keyboard and focus checks
@@ -111,7 +111,7 @@ Run an axe audit in the development page and the production preview page.
 
 ## 7. Phase 1 technical gate
 
-These checks are required before Phase 3 work depends on the selected editor architecture. Do not use the existing synthetic Vitest fixtures as a substitute for the real-browser checks.
+These checks are required before later raster and selection tools depend on the selected editor architecture. Do not use the existing synthetic Vitest fixtures as a substitute for the real-browser checks.
 
 Open the development-only browser harness at `/__spikes/phase1`. It renders the Fabric scene, raster bridge, warp mesh, tile-history, and real JPEG encoder checks. Use the confirmation controls only after inspecting the rendered result. The Object Selection card remains blocked until the owner supplies five approved local photos and a second candidate with a quantized lazy-loaded segmentation model.
 
@@ -131,7 +131,7 @@ Use a small PNG, JPEG, and WebP fixture that is permitted for local testing. Do 
 
 | ID     | Action                                                                                                   | Expected outcome                                                                                                                                              |
 | ------ | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| DOC-01 | Click `OPEN` or `OPEN IMAGE // PHASE 3`, then choose a PNG, JPEG, or WebP file.                          | The image opens in the editor as one visible raster layer. The document name, pixel dimensions, layer name, and `BUILD / PHASE 3` status update.              |
+| DOC-01 | Click `OPEN` or `OPEN IMAGE // LOCAL`, then choose a PNG, JPEG, or WebP file.                            | The image opens in the editor as one visible raster layer. The document name, pixel dimensions, layer name, and `BUILD / PHASE 4` status update.              |
 | DOC-02 | Drag a supported PNG, JPEG, or WebP file over the canvas zone and release it.                            | The same local import path opens the document. No page navigation or browser file upload occurs.                                                              |
 | DOC-03 | Try a GIF, a file with a mismatched image type, and a file larger than the documented local limit.       | LiteEdit rejects each file before creating a document and shows a readable warning. The existing document, if any, remains unchanged.                         |
 | DOC-04 | Click `NEW`, enter valid width and height values, choose Transparent, White, and Black, and create each. | A blank document opens at the requested size. Transparent keeps the canvas alpha; White and Black fill the backing canvas.                                    |
@@ -143,7 +143,26 @@ Use a small PNG, JPEG, and WebP fixture that is permitted for local testing. Do 
 
 For each fixture, record the fixture dimensions, browser, result, and evidence. If a browser cannot decode WebP, mark only that fixture `BLOCKED` and continue with PNG and JPEG.
 
-## 9. Feedback format
+## 9. Phase 4 layers and structural history
+
+Use a small image with obvious foreground and background colors. Keep the Layers, History, and Network panels visible as needed.
+
+| ID      | Action                                                                                                                         | Expected outcome                                                                                                                                                                 |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LAY-01  | Open an image. Add two paint layers and one group.                                                                             | Each action adds one topmost row. The panel count is correct. The Layers panel shows topmost items first.                                                                        |
+| LAY-02  | Rename a paint layer. Hide it, show it, lock it, unlock it, and set opacity to 55%.                                            | The name and state controls update. Each completed change has one readable History row. Opacity input events coalesce instead of flooding History.                               |
+| LAY-03  | Use the up and down controls on a layer. Then drag it onto a group and use `OUT` to return it to the root.                     | Sibling order changes predictably. Dropping onto a group nests the layer. `OUT` places it immediately above its former parent. No layer disappears or duplicates.                |
+| LAY-04  | Wrap an active layer with `GROUP`. Set the group opacity to 50%. Select the child and inspect its opacity. Then use `UNGROUP`. | The group owns the active layer. Group opacity changes without changing the child's stored opacity. Ungroup preserves child order and opacity.                                   |
+| LAY-05  | Create two nested groups. Try to drag the outer group into its own descendant.                                                 | LiteEdit rejects the cycle, shows a warning, and leaves the layer tree unchanged.                                                                                                |
+| LAY-06  | Duplicate a group that contains raster children. Hide the original. Delete the duplicate. Undo once, then redo once.           | The duplicate has independent node and raster-buffer IDs but identical pixels. Deleting the group is one transaction. Undo restores the full subtree; redo removes it again.     |
+| SYNC-01 | Select `MOVE`. Click a visible raster object, then select another row in the Layers panel.                                     | Canvas selection updates the active Layers row. Panel selection updates the corresponding top-level canvas selection without changing pixels.                                    |
+| HIST-01 | Perform at least ten mixed layer operations. Undo to the document start, then redo to the final state.                         | Names, visibility, lock, opacity, hierarchy, active layer, and order match the initial and final states exactly. Undo and redo buttons and keyboard shortcuts stay synchronized. |
+| HIST-02 | Undo two operations, then make a new layer edit.                                                                               | The redo branch clears immediately. The History panel marks only applied entries as current.                                                                                     |
+| EXP-01  | With nested groups, hidden layers, and an active canvas selection, export PNG and inspect it at document resolution.           | Export respects hierarchy, visibility, and post-composite group opacity. It excludes canvas controls, viewport zoom, panel state, grid detail, and all editor overlays.          |
+| PRIV-01 | Keep the Network panel open while creating, duplicating, grouping, undoing, redoing, and exporting layers.                     | No image or document bytes leave the browser.                                                                                                                                    |
+| SIZE-01 | Run LAY-01 through HIST-02 at 1024 x 768, 1440 x 900, and 1920 x 1080.                                                         | Layer and History controls stay readable and operable. The layer tree scrolls inside the inspector and does not push the status bar off-screen.                                  |
+
+## 10. Feedback format
 
 Return one row for every ID. Do not omit blocked or not-run checks.
 

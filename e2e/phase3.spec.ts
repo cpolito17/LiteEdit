@@ -5,11 +5,11 @@ const onePixelPng = Buffer.from(
   "base64",
 );
 
-test("opens and exports a local PNG without an image request", async ({ page }) => {
-  const remoteImageRequests: string[] = [];
+test("opens and exports a local PNG without a network image request", async ({ page }) => {
+  const networkImageRequests: string[] = [];
   page.on("request", (request) => {
-    if (request.resourceType() === "image" && !request.url().startsWith("data:")) {
-      remoteImageRequests.push(request.url());
+    if (request.resourceType() === "image" && /^https?:/.test(request.url())) {
+      networkImageRequests.push(request.url());
     }
   });
 
@@ -24,8 +24,8 @@ test("opens and exports a local PNG without an image request", async ({ page }) 
   await expect(page.getByText("DOCUMENT / PIXEL")).toBeVisible();
   await expect(page.getByText("SIZE / 1 × 1 PX")).toBeVisible();
   await expect(page.getByRole("button", { name: "EXPORT" })).toBeEnabled();
-  await expect(page.getByText("BUILD / PHASE 3")).toBeVisible();
-  expect(remoteImageRequests).toEqual([]);
+  await expect(page.getByText("BUILD / PHASE 4")).toBeVisible();
+  expect(networkImageRequests).toEqual([]);
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "EXPORT" }).click();

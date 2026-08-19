@@ -1,6 +1,6 @@
 # LiteEdit Browser Test Plan
 
-This document covers the browser checks for the implemented Phase 0-4 work, the unresolved Phase 1 technical gate, the Phase 3 local document workflow, and Phase 4 layers and structural history.
+This document covers the browser checks for the implemented Phase 0-5 work, the unresolved Phase 1 technical gate, the Phase 3 local document workflow, Phase 4 layers and structural history, and Phase 5 transforms.
 
 Do not mark a check as `PASS` when the feature is only covered by a jsdom or unit test. Use `BLOCKED` when the required browser or test harness is not available.
 
@@ -67,7 +67,7 @@ Run each check at `1024 x 768`, `1440 x 900`, and `1920 x 1080`.
 | SHELL-04 | Inspect the left tool rail.                       | All ten tools are visible: Move, Marquee, Lasso, Select, Brush, Shape, Eraser, Crop, Picker, and Hand. Each is a button with an accessible name, shortcut text, visible focus state, and `aria-pressed`. |
 | SHELL-05 | Inspect the empty canvas state.                   | `LOCAL IMAGE WORKBENCH`, the no-document message, the local-processing notice, viewport rulers, and zoom status are visible. `OPEN IMAGE // LOCAL` is enabled.                                           |
 | SHELL-06 | Inspect the right inspector.                      | The four tabs `LAYERS`, `HISTORY`, `PROPERTIES`, and `SWATCHES` are visible. The active tab is clear without relying on color alone.                                                                     |
-| SHELL-07 | Inspect the bottom status bar.                    | Document, size, pointer, active-tool, history, and `BUILD / PHASE 4` status text are visible and readable.                                                                                               |
+| SHELL-07 | Inspect the bottom status bar.                    | Document, size, pointer, active-tool, history, and `BUILD / PHASE 5` status text are visible and readable.                                                                                               |
 | SHELL-08 | Inspect the shell at normal and high-DPI scaling. | Text remains legible. Controls remain at least 32 px high where applicable. No control overlaps another.                                                                                                 |
 
 ## 4. Keyboard and focus checks
@@ -131,7 +131,7 @@ Use a small PNG, JPEG, and WebP fixture that is permitted for local testing. Do 
 
 | ID     | Action                                                                                                   | Expected outcome                                                                                                                                              |
 | ------ | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| DOC-01 | Click `OPEN` or `OPEN IMAGE // LOCAL`, then choose a PNG, JPEG, or WebP file.                            | The image opens in the editor as one visible raster layer. The document name, pixel dimensions, layer name, and `BUILD / PHASE 4` status update.              |
+| DOC-01 | Click `OPEN` or `OPEN IMAGE // LOCAL`, then choose a PNG, JPEG, or WebP file.                            | The image opens in the editor as one visible raster layer. The document name, pixel dimensions, layer name, and `BUILD / PHASE 5` status update.              |
 | DOC-02 | Drag a supported PNG, JPEG, or WebP file over the canvas zone and release it.                            | The same local import path opens the document. No page navigation or browser file upload occurs.                                                              |
 | DOC-03 | Try a GIF, a file with a mismatched image type, and a file larger than the documented local limit.       | LiteEdit rejects each file before creating a document and shows a readable warning. The existing document, if any, remains unchanged.                         |
 | DOC-04 | Click `NEW`, enter valid width and height values, choose Transparent, White, and Black, and create each. | A blank document opens at the requested size. Transparent keeps the canvas alpha; White and Black fill the backing canvas.                                    |
@@ -162,7 +162,26 @@ Use a small image with obvious foreground and background colors. Keep the Layers
 | PRIV-01 | Keep the Network panel open while creating, duplicating, grouping, undoing, redoing, and exporting layers.                     | No image or document bytes leave the browser.                                                                                                                                    |
 | SIZE-01 | Run LAY-01 through HIST-02 at 1024 x 768, 1440 x 900, and 1920 x 1080.                                                         | Layer and History controls stay readable and operable. The layer tree scrolls inside the inspector and does not push the status bar off-screen.                                  |
 
-## 10. Feedback format
+## 10. Phase 5 move and transform
+
+Use a small asymmetric image with opaque pixels reaching every edge. Keep the Properties, History, and Network panels available.
+
+| ID       | Action                                                                                                                 | Expected outcome                                                                                                                                                 |
+| -------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MOVE-01  | Select Move and drag the active layer once.                                                                            | The layer follows the pointer, commits when released, and adds exactly one `Move` History row.                                                                   |
+| MOVE-02  | Press each arrow key, then hold Shift and press an arrow.                                                              | The active unlocked layer moves by 1 px or 10 px. Repeated keys within 250 ms coalesce into one readable nudge transaction.                                      |
+| XFORM-01 | Press `Cmd/Ctrl+T`. Drag scale and rotation handles, then edit center, scale, rotation, and skew fields.               | The Properties panel and canvas preview the same affine transform. Numeric center uses the parent coordinate plane. History does not change during the preview.  |
+| XFORM-02 | Press Escape during the transform from XFORM-01.                                                                       | The exact pre-transform position, matrix, active layer, and serialized model hash return. No History row is added.                                               |
+| XFORM-03 | Start another transform, change several values, and press Enter while a numeric field has focus.                       | The final transform remains, controls exit edit mode, and one `Transform` History row is added. Undo and redo reproduce the before/after render.                 |
+| XFORM-04 | Transform a raster nested inside two groups, including non-uniform scale and skew, then export.                        | The top-level interactive group transforms without flattening child coordinates. Export matches the visible layer composition and contains no transform handles. |
+| WARP-01  | Choose `WARP 3 × 3`. Drag and keyboard-nudge several of the nine nodes, then press Escape.                             | The mesh previews in layer coordinates, the source raster hash remains exact, the mesh closes, and no History row is added.                                      |
+| WARP-02  | Start warp again, move the center node without folding a triangle, and choose Commit.                                  | The raster changes once with no visible one-pixel mesh seams. One byte-accounted `Warp` History row appears.                                                     |
+| WARP-03  | Undo and redo WARP-02, comparing pixel hashes or downloaded PNGs.                                                      | Undo restores the exact pre-warp raster and redo restores the exact post-warp raster.                                                                            |
+| WARP-04  | Attempt to fold or collapse the mesh by crossing nodes, then commit.                                                   | LiteEdit rejects the invalid mesh, shows a warning, and preserves the pre-warp raster.                                                                           |
+| PRIV-02  | Keep the Network panel open for MOVE-01 through WARP-03.                                                               | No image, mesh, model, or history bytes leave the browser.                                                                                                       |
+| PERF-01  | On the recorded reference machine, preview a transform on a 4096 x 4096 image and capture a browser performance trace. | Preview targets 60 fps and does not fall below the accepted 45 fps floor. Record hardware, OS, browser version, device-pixel ratio, and trace evidence.          |
+
+## 11. Feedback format
 
 Return one row for every ID. Do not omit blocked or not-run checks.
 

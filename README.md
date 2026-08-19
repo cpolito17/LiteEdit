@@ -4,9 +4,9 @@ LiteEdit is a desktop-first, browser-local photo editor. The Worker serves stati
 
 ## Current status
 
-Phase 0 through Phase 4 are implemented. The current application provides the accessible soft technical shell, local PNG/JPEG/WebP import, blank documents, Fabric-backed viewport navigation, isolated unchanged-document PNG export, nested raster layer groups, visibility, lock, opacity, ordering, duplication, deletion, drag hierarchy, and bounded structural undo/redo with a visible History panel. The layer model and raster sources remain local to the browser.
+Phase 0 through Phase 5 are implemented. The current application provides the accessible soft technical shell, local PNG/JPEG/WebP import, blank documents, Fabric-backed viewport navigation, isolated PNG export, nested raster layer groups, bounded undo/redo, pointer move and keyboard nudge, non-destructive scale/rotate/skew transforms with numeric fields, and a destructive 3 x 3 raster warp. Enter commits explicit transform sessions and Escape restores their exact pre-edit state. The layer model and raster sources remain local to the browser.
 
-Raster painting, transforms, warp, selection-aware editing, crop, resize, recovery, and JPEG export still require later phases. Object Selection remains gated on five approved photos and a second local segmentation candidate.
+Raster painting, vector shapes, selection-aware editing, crop, resize, recovery, and JPEG export still require later phases. Object Selection remains gated on five approved photos and a second local segmentation candidate.
 
 ## Development
 

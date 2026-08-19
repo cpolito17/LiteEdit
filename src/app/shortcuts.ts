@@ -6,6 +6,8 @@ export type ShortcutAction =
   | { type: "redo" }
   | { type: "clear-selection" }
   | { type: "transform" }
+  | { type: "commit" }
+  | { type: "nudge"; x: number; y: number }
   | { type: "cancel" };
 
 const toolByShortcut = new Map(tools.map((tool) => [tool.shortcut.toLowerCase(), tool.id]));
@@ -19,17 +21,41 @@ function isEditableTarget(target: EventTarget | null): boolean {
     target.isContentEditable ||
     target.tagName === "INPUT" ||
     target.tagName === "TEXTAREA" ||
-    target.tagName === "SELECT"
+    target.tagName === "SELECT" ||
+    target.tagName === "BUTTON"
+  );
+}
+
+function shouldCommitFromTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return true;
+  }
+  return (
+    !target.isContentEditable &&
+    target.tagName !== "BUTTON" &&
+    target.tagName !== "TEXTAREA" &&
+    target.tagName !== "SELECT"
   );
 }
 
 export function getShortcutAction(event: KeyboardEvent): ShortcutAction | null {
-  if (isEditableTarget(event.target) || event.altKey) {
+  if (event.altKey) {
     return null;
   }
 
   const key = event.key.toLowerCase();
   const modifier = event.ctrlKey || event.metaKey;
+
+  if (key === "escape") {
+    return { type: "cancel" };
+  }
+  if (key === "enter") {
+    return shouldCommitFromTarget(event.target) ? { type: "commit" } : null;
+  }
+
+  if (isEditableTarget(event.target)) {
+    return null;
+  }
 
   if (modifier) {
     if (key === "z" && event.shiftKey) {
@@ -47,8 +73,18 @@ export function getShortcutAction(event: KeyboardEvent): ShortcutAction | null {
     return null;
   }
 
-  if (key === "escape") {
-    return { type: "cancel" };
+  const distance = event.shiftKey ? 10 : 1;
+  if (key === "arrowleft") {
+    return { type: "nudge", x: -distance, y: 0 };
+  }
+  if (key === "arrowright") {
+    return { type: "nudge", x: distance, y: 0 };
+  }
+  if (key === "arrowup") {
+    return { type: "nudge", x: 0, y: -distance };
+  }
+  if (key === "arrowdown") {
+    return { type: "nudge", x: 0, y: distance };
   }
 
   const tool = toolByShortcut.get(key);

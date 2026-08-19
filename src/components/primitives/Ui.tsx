@@ -215,6 +215,7 @@ type NumericFieldProps = {
   max?: number;
   step?: number;
   suffix?: string;
+  disabled?: boolean;
   onChange: (value: number) => void;
 };
 
@@ -225,6 +226,7 @@ export function NumericField({
   max,
   step = 1,
   suffix,
+  disabled = false,
   onChange,
 }: NumericFieldProps) {
   const id = useId();
@@ -244,6 +246,7 @@ export function NumericField({
           max={max}
           step={step}
           value={value}
+          disabled={disabled}
           onChange={(event) => onChange(Number(event.target.value))}
         />
         {suffix ? <span className="numeric-suffix">{suffix}</span> : null}

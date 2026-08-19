@@ -303,6 +303,14 @@ export function assertDocumentInvariant(document: DocumentModel): void {
     if (layer.opacity < 0 || layer.opacity > 1) {
       throw new Error("Layer opacity must be between 0 and 1.");
     }
+    if (layer.transform.some((value) => !Number.isFinite(value))) {
+      throw new Error("Layer transforms must contain only finite numbers.");
+    }
+    const determinant =
+      layer.transform[0] * layer.transform[3] - layer.transform[1] * layer.transform[2];
+    if (Math.abs(determinant) < 1e-8) {
+      throw new Error("Layer transforms cannot be singular.");
+    }
     if (layer.kind === "raster" && (layer.width < 1 || layer.height < 1)) {
       throw new Error("Layer dimensions must be positive.");
     }
@@ -439,6 +447,17 @@ export function setLayerOpacity(
     throw new Error("Layer opacity must be between 0 and 1.");
   }
   return withLayerUpdate(document, layerId, (layer) => ({ ...layer, opacity }));
+}
+
+export function setLayerTransform(
+  document: DocumentModel,
+  layerId: LayerId,
+  transform: Matrix2D,
+): DocumentModel {
+  return withLayerUpdate(document, layerId, (layer) => ({
+    ...layer,
+    transform: [...transform] as Matrix2D,
+  }));
 }
 
 function insertId(ids: LayerId[], id: LayerId, index: number): void {

@@ -1,4 +1,9 @@
 import { cloneDocumentModel, serializeDocumentModel, type DocumentModel } from "../document-model";
+import {
+  cloneRasterSnapshot,
+  rasterSnapshotsEqual,
+  type RasterSnapshot,
+} from "../raster/raster-snapshot";
 
 export const DEFAULT_HISTORY_STEP_LIMIT = 50;
 export const DEFAULT_HISTORY_BYTE_LIMIT = 256 * 1024 * 1024;
@@ -12,6 +17,18 @@ type StoredHistoryEntry = {
   estimatedBytes: number;
   committedAt: number;
   coalesceKey?: string;
+  rasterChanges: HistoryRasterChange[];
+};
+
+export type HistoryRasterChange = {
+  bufferId: string;
+  before: RasterSnapshot;
+  after: RasterSnapshot;
+};
+
+export type HistoryRestore = {
+  document: DocumentModel;
+  rasterChanges: Array<{ bufferId: string; snapshot: RasterSnapshot }>;
 };
 
 export type HistoryEntrySummary = Pick<
@@ -33,6 +50,7 @@ export type CommitHistoryOptions = {
   coalesceKey?: string;
   committedAt?: number;
   coalesceWindowMs?: number;
+  rasterChanges?: HistoryRasterChange[];
 };
 
 function estimateModelBytes(model: DocumentModel): number {
@@ -50,6 +68,21 @@ function summarize(entry: StoredHistoryEntry): HistoryEntrySummary {
     estimatedBytes: entry.estimatedBytes,
     committedAt: entry.committedAt,
   };
+}
+
+function cloneRasterChange(change: HistoryRasterChange): HistoryRasterChange {
+  return {
+    bufferId: change.bufferId,
+    before: cloneRasterSnapshot(change.before),
+    after: cloneRasterSnapshot(change.after),
+  };
+}
+
+function estimateRasterBytes(changes: HistoryRasterChange[]): number {
+  return changes.reduce(
+    (total, change) => total + change.before.pixels.byteLength + change.after.pixels.byteLength,
+    0,
+  );
 }
 
 export class StructuralHistory {
@@ -85,7 +118,10 @@ export class StructuralHistory {
 
     const beforeSerialized = serializeDocumentModel(before);
     const afterSerialized = serializeDocumentModel(after);
-    if (beforeSerialized === afterSerialized) {
+    const rasterChanges = (options.rasterChanges ?? []).filter(
+      (change) => !rasterSnapshotsEqual(change.before, change.after),
+    );
+    if (beforeSerialized === afterSerialized && rasterChanges.length === 0) {
       return false;
     }
 
@@ -94,7 +130,9 @@ export class StructuralHistory {
     const previous = this.applied[this.applied.length - 1];
     if (
       options.coalesceKey &&
+      rasterChanges.length === 0 &&
       previous?.coalesceKey === options.coalesceKey &&
+      previous.rasterChanges.length === 0 &&
       committedAt - previous.committedAt <= coalesceWindowMs
     ) {
       previous.after = cloneDocumentModel(after);
@@ -107,9 +145,13 @@ export class StructuralHistory {
         label: normalizedLabel,
         before: cloneDocumentModel(before),
         after: cloneDocumentModel(after),
-        estimatedBytes: estimateModelBytes(before) + estimateModelBytes(after),
+        estimatedBytes:
+          estimateModelBytes(before) +
+          estimateModelBytes(after) +
+          estimateRasterBytes(rasterChanges),
         committedAt,
         coalesceKey: options.coalesceKey,
+        rasterChanges: rasterChanges.map(cloneRasterChange),
       });
       this.nextId += 1;
     }
@@ -119,22 +161,34 @@ export class StructuralHistory {
     return true;
   }
 
-  undo(): DocumentModel | null {
+  undo(): HistoryRestore | null {
     const entry = this.applied.pop();
     if (!entry) {
       return null;
     }
     this.redoEntries.push(entry);
-    return cloneDocumentModel(entry.before);
+    return {
+      document: cloneDocumentModel(entry.before),
+      rasterChanges: entry.rasterChanges.map((change) => ({
+        bufferId: change.bufferId,
+        snapshot: cloneRasterSnapshot(change.before),
+      })),
+    };
   }
 
-  redo(): DocumentModel | null {
+  redo(): HistoryRestore | null {
     const entry = this.redoEntries.pop();
     if (!entry) {
       return null;
     }
     this.applied.push(entry);
-    return cloneDocumentModel(entry.after);
+    return {
+      document: cloneDocumentModel(entry.after),
+      rasterChanges: entry.rasterChanges.map((change) => ({
+        bufferId: change.bufferId,
+        snapshot: cloneRasterSnapshot(change.after),
+      })),
+    };
   }
 
   snapshot(): StructuralHistorySnapshot {

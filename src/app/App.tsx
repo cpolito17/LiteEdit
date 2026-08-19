@@ -7,15 +7,8 @@ import { getShortcutAction } from "./shortcuts";
 import { panels, tools, type PanelId, type ToolId } from "./tool-model";
 import { HistoryPanel } from "../components/panels/HistoryPanel";
 import { LayersPanel } from "../components/panels/LayersPanel";
-import {
-  Dialog,
-  NumericField,
-  SliderField,
-  Tabs,
-  Toast,
-  Tooltip,
-  UiButton,
-} from "../components/primitives/Ui";
+import { TransformPanel } from "../components/panels/TransformPanel";
+import { Dialog, NumericField, Tabs, Toast, Tooltip, UiButton } from "../components/primitives/Ui";
 import {
   createBlankDocument,
   deleteLayerSubtree,
@@ -30,6 +23,7 @@ import {
   setActiveLayer,
   setLayerLocked,
   setLayerOpacity,
+  setLayerTransform,
   setLayerVisibility,
   ungroupLayer,
   wrapLayerInGroup,
@@ -37,7 +31,11 @@ import {
   type DocumentModel,
   type LayerId,
 } from "../editor/document-model";
-import { StructuralHistory, type CommitHistoryOptions } from "../editor/history/structural-history";
+import {
+  StructuralHistory,
+  type CommitHistoryOptions,
+  type HistoryRestore,
+} from "../editor/history/structural-history";
 import {
   createBlankSource,
   createDocumentFromDecodedImage,
@@ -50,6 +48,19 @@ import {
   createTransparentRasterSource,
   type RasterSource,
 } from "../editor/raster/raster-sources";
+import {
+  captureRasterSnapshot,
+  restoreRasterSnapshot,
+  type RasterSnapshot,
+} from "../editor/raster/raster-snapshot";
+import { createDefaultWarpNodes, warpRasterSource } from "../editor/raster/warp";
+import type { RendererInteractionMode, TransformGesture } from "../editor/renderer/fabric-adapter";
+import {
+  composeLayerTransform,
+  translateMatrix,
+  type TransformFields,
+  type TransformPoint,
+} from "../editor/transform";
 import type { Point } from "../editor/viewport";
 
 const panelOptions = panels.map((panel) => ({ id: panel, label: panel }));
@@ -57,17 +68,41 @@ const panelOptions = panels.map((panel) => ({ id: panel, label: panel }));
 const panelCopy: Record<PanelId, string> = {
   LAYERS: "Create or open a document to manage its layer tree.",
   HISTORY: "Structural edits appear here as reversible transactions.",
-  PROPERTIES: "Viewport and document controls are ready for local raster work.",
+  PROPERTIES: "Transform and viewport controls appear after a document is opened.",
   SWATCHES: "Color tokens stay local until the raster editing surface lands.",
 };
 
 type ToastTone = "info" | "success" | "warning";
 
+type TransformSession = {
+  layerId: LayerId;
+  before: DocumentModel;
+};
+
+type WarpSession = {
+  layerId: LayerId;
+  before: RasterSnapshot;
+  nodes: TransformPoint[];
+};
+
+function getTransformTargetId(model: DocumentModel, layerId: LayerId): LayerId {
+  let layer = getLayerById(model, layerId);
+  while (layer.parentId !== null) {
+    layer = getLayerById(model, layer.parentId);
+  }
+  return layer.id;
+}
+
+function matricesEqual(left: readonly number[], right: readonly number[]): boolean {
+  return left.every((value, index) => Math.abs(value - (right[index] ?? Number.NaN)) < 1e-10);
+}
+
 function App() {
   const [activeTool, setActiveTool] = useState<ToolId>("move");
   const [activePanel, setActivePanel] = useState<PanelId>("LAYERS");
   const [zoom, setZoom] = useState(100);
-  const [rotation, setRotation] = useState(0);
+  const [transformSession, setTransformSession] = useState<TransformSession | null>(null);
+  const [warpSession, setWarpSession] = useState<WarpSession | null>(null);
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastTone, setToastTone] = useState<ToastTone>("info");
@@ -109,17 +144,15 @@ function App() {
     setHistoryVersion((version) => version + 1);
   }, []);
 
-  const commitDocument = useCallback(
+  const recordDocumentCommit = useCallback(
     (
       label: string,
+      before: DocumentModel,
       next: DocumentModel,
       options: CommitHistoryOptions = {},
       tone: ToastTone = "success",
     ) => {
-      if (!documentModel) {
-        return false;
-      }
-      const committed = historyRef.current.commit(label, documentModel, next, options);
+      const committed = historyRef.current.commit(label, before, next, options);
       if (!committed) {
         return false;
       }
@@ -128,32 +161,279 @@ function App() {
       announce(label.toUpperCase(), tone);
       return true;
     },
-    [announce, documentModel, refreshHistory],
+    [announce, refreshHistory],
   );
 
+  const commitDocument = useCallback(
+    (
+      label: string,
+      next: DocumentModel,
+      options: CommitHistoryOptions = {},
+      tone: ToastTone = "success",
+    ) => (documentModel ? recordDocumentCommit(label, documentModel, next, options, tone) : false),
+    [documentModel, recordDocumentCommit],
+  );
+
+  const applyHistoryRestore = useCallback((restored: HistoryRestore) => {
+    setDocumentModel(restored.document);
+    if (restored.rasterChanges.length > 0) {
+      setDocumentSources((current) => {
+        if (!current) return current;
+        const next = { ...current };
+        for (const change of restored.rasterChanges) {
+          next[change.bufferId] = restoreRasterSnapshot(change.snapshot);
+        }
+        return next;
+      });
+    }
+  }, []);
+
+  const cancelActiveEdit = useCallback(() => {
+    if (transformSession) {
+      setDocumentModel(transformSession.before);
+      setTransformSession(null);
+      announce("TRANSFORM / CANCELLED");
+      return true;
+    }
+    if (warpSession) {
+      setWarpSession(null);
+      announce("WARP / CANCELLED");
+      return true;
+    }
+    if (newDialogOpen) {
+      setNewDialogOpen(false);
+      announce("ACTION / CANCELLED");
+      return true;
+    }
+    return false;
+  }, [announce, newDialogOpen, transformSession, warpSession]);
+
   const handleUndo = useCallback(() => {
+    if (transformSession || warpSession) {
+      cancelActiveEdit();
+      return;
+    }
     const label = historyRef.current.snapshot().applied.at(-1)?.label;
     const restored = historyRef.current.undo();
     if (!restored) {
       announce(documentModel ? "UNDO / AT DOCUMENT START" : "UNDO / NO DOCUMENT LOADED");
       return;
     }
-    setDocumentModel(restored);
+    applyHistoryRestore(restored);
     refreshHistory();
     announce(`UNDO / ${label ?? "EDIT"}`);
-  }, [announce, documentModel, refreshHistory]);
+  }, [
+    announce,
+    applyHistoryRestore,
+    cancelActiveEdit,
+    documentModel,
+    refreshHistory,
+    transformSession,
+    warpSession,
+  ]);
 
   const handleRedo = useCallback(() => {
+    if (transformSession || warpSession) {
+      cancelActiveEdit();
+      return;
+    }
     const label = historyRef.current.snapshot().redo[0]?.label;
     const restored = historyRef.current.redo();
     if (!restored) {
       announce(documentModel ? "REDO / NO PENDING EDIT" : "REDO / NO DOCUMENT LOADED");
       return;
     }
-    setDocumentModel(restored);
+    applyHistoryRestore(restored);
     refreshHistory();
     announce(`REDO / ${label ?? "EDIT"}`);
-  }, [announce, documentModel, refreshHistory]);
+  }, [
+    announce,
+    applyHistoryRestore,
+    cancelActiveEdit,
+    documentModel,
+    refreshHistory,
+    transformSession,
+    warpSession,
+  ]);
+
+  const beginTransform = useCallback(() => {
+    if (!documentModel) {
+      announce("TRANSFORM / WAITING FOR DOCUMENT");
+      return;
+    }
+    if (transformSession) {
+      announce("TRANSFORM / ALREADY ACTIVE");
+      return;
+    }
+    const layerId = getTransformTargetId(documentModel, documentModel.activeLayerId);
+    const layer = getLayerById(documentModel, layerId);
+    if (layer.locked) {
+      announce("TRANSFORM / LAYER IS LOCKED", "warning");
+      return;
+    }
+    setWarpSession(null);
+    setTransformSession({ layerId, before: documentModel });
+    setDocumentModel(setActiveLayer(documentModel, layerId));
+    setActivePanel("PROPERTIES");
+    setActiveTool("move");
+    announce(`TRANSFORM / ${layer.name.toUpperCase()}`);
+  }, [announce, documentModel, transformSession]);
+
+  const beginWarp = useCallback(() => {
+    if (!documentModel || !documentSources) return;
+    const layer = getLayerById(documentModel, documentModel.activeLayerId);
+    if (layer.kind !== "raster") {
+      announce("WARP / SELECT ONE RASTER LAYER", "warning");
+      return;
+    }
+    if (layer.locked) {
+      announce("WARP / LAYER IS LOCKED", "warning");
+      return;
+    }
+    const source = documentSources[layer.bufferId];
+    if (!source) {
+      announce("WARP / RASTER SOURCE IS MISSING", "warning");
+      return;
+    }
+    setTransformSession(null);
+    setWarpSession({
+      layerId: layer.id,
+      before: captureRasterSnapshot(source, layer.width, layer.height),
+      nodes: createDefaultWarpNodes(layer.width, layer.height),
+    });
+    setActivePanel("PROPERTIES");
+    announce(`WARP / ${layer.name.toUpperCase()}`);
+  }, [announce, documentModel, documentSources]);
+
+  const commitActiveEdit = useCallback(() => {
+    if (!documentModel) return false;
+    if (transformSession) {
+      const layer = getLayerById(documentModel, transformSession.layerId);
+      const beforeLayer = getLayerById(transformSession.before, transformSession.layerId);
+      setTransformSession(null);
+      if (matricesEqual(layer.transform, beforeLayer.transform)) {
+        setDocumentModel(transformSession.before);
+        announce("TRANSFORM / NO CHANGE");
+        return true;
+      }
+      if (
+        !recordDocumentCommit(`Transform: ${layer.name}`, transformSession.before, documentModel)
+      ) {
+        announce("TRANSFORM / NO CHANGE");
+      }
+      return true;
+    }
+    if (warpSession && documentSources) {
+      try {
+        const layer = getLayerById(documentModel, warpSession.layerId);
+        if (layer.kind !== "raster") {
+          throw new Error("Warp requires one raster layer.");
+        }
+        const output = warpRasterSource(
+          restoreRasterSnapshot(warpSession.before),
+          layer.width,
+          layer.height,
+          { scope: { kind: "layer" }, destinationNodes: warpSession.nodes },
+        );
+        const after = captureRasterSnapshot(output, layer.width, layer.height);
+        const committed = recordDocumentCommit(
+          `Warp: ${layer.name}`,
+          documentModel,
+          documentModel,
+          {
+            rasterChanges: [{ bufferId: layer.bufferId, before: warpSession.before, after }],
+          },
+        );
+        setWarpSession(null);
+        if (committed) {
+          setDocumentSources((current) =>
+            current ? { ...current, [layer.bufferId]: output } : current,
+          );
+        } else {
+          announce("WARP / NO CHANGE");
+        }
+        return true;
+      } catch (error) {
+        announce(
+          error instanceof Error ? error.message : "The warp could not be committed.",
+          "warning",
+        );
+        return false;
+      }
+    }
+    return false;
+  }, [
+    announce,
+    documentModel,
+    documentSources,
+    recordDocumentCommit,
+    transformSession,
+    warpSession,
+  ]);
+
+  const handleTransformChange = useCallback(
+    (fields: TransformFields) => {
+      if (!documentModel || !transformSession) return;
+      try {
+        const matrix = composeLayerTransform(documentModel, transformSession.layerId, fields);
+        setDocumentModel(setLayerTransform(documentModel, transformSession.layerId, matrix));
+      } catch (error) {
+        announce(error instanceof Error ? error.message : "The transform is invalid.", "warning");
+      }
+    },
+    [announce, documentModel, transformSession],
+  );
+
+  const handleTransformGesture = useCallback(
+    (gesture: TransformGesture) => {
+      if (!documentModel) return;
+      const layer = getLayerById(documentModel, gesture.layerId);
+      if (layer.locked) return;
+      const next = setLayerTransform(
+        setActiveLayer(documentModel, gesture.layerId),
+        gesture.layerId,
+        gesture.matrix,
+      );
+      if (transformSession) {
+        setDocumentModel(next);
+        announce(`${gesture.action.toUpperCase()} / PREVIEW`);
+        return;
+      }
+      const prefix =
+        gesture.action === "move"
+          ? "Move"
+          : gesture.action === "scale"
+            ? "Scale"
+            : gesture.action === "rotate"
+              ? "Rotate"
+              : "Transform";
+      commitDocument(`${prefix}: ${layer.name}`, next);
+    },
+    [announce, commitDocument, documentModel, transformSession],
+  );
+
+  const handleNudge = useCallback(
+    (deltaX: number, deltaY: number) => {
+      if (!documentModel || warpSession) return;
+      const layerId = transformSession?.layerId ?? documentModel.activeLayerId;
+      const layer = getLayerById(documentModel, layerId);
+      if (layer.locked) {
+        announce("MOVE / LAYER IS LOCKED", "warning");
+        return;
+      }
+      const next = setLayerTransform(
+        documentModel,
+        layerId,
+        translateMatrix(layer.transform, deltaX, deltaY),
+      );
+      if (transformSession) {
+        setDocumentModel(next);
+      } else {
+        commitDocument(`Nudge: ${layer.name}`, next, { coalesceKey: `nudge:${layerId}` });
+      }
+    },
+    [announce, commitDocument, documentModel, transformSession, warpSession],
+  );
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -162,9 +442,22 @@ function App() {
         return;
       }
 
+      if (newDialogOpen && action.type !== "cancel") {
+        return;
+      }
+
+      if (
+        (action.type === "commit" || action.type === "cancel") &&
+        !transformSession &&
+        !warpSession &&
+        !newDialogOpen
+      ) {
+        return;
+      }
       event.preventDefault();
       switch (action.type) {
         case "tool":
+          cancelActiveEdit();
           setActiveTool(action.tool);
           announce(`ACTIVE TOOL / ${action.tool.toUpperCase()}`);
           break;
@@ -178,18 +471,34 @@ function App() {
           announce("SELECTION / CLEARED");
           break;
         case "transform":
-          announce(documentModel ? "TRANSFORM / PHASE 5" : "TRANSFORM / WAITING FOR DOCUMENT");
+          beginTransform();
+          break;
+        case "commit":
+          commitActiveEdit();
+          break;
+        case "nudge":
+          handleNudge(action.x, action.y);
           break;
         case "cancel":
-          setNewDialogOpen(false);
-          announce("ACTION / CANCELLED");
+          cancelActiveEdit();
           break;
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [announce, documentModel, handleRedo, handleUndo]);
+  }, [
+    announce,
+    beginTransform,
+    cancelActiveEdit,
+    commitActiveEdit,
+    handleNudge,
+    handleRedo,
+    handleUndo,
+    newDialogOpen,
+    transformSession,
+    warpSession,
+  ]);
 
   const setDocument = useCallback(
     (model: DocumentModel, source: RasterSource, message: string) => {
@@ -200,7 +509,8 @@ function App() {
       setImportError(null);
       setExportReady(false);
       setZoom(100);
-      setRotation(0);
+      setTransformSession(null);
+      setWarpSession(null);
       refreshHistory();
       announce(message, "success");
     },
@@ -329,9 +639,23 @@ function App() {
     }
   };
 
-  const handleActiveLayerChange = useCallback((layerId: LayerId) => {
-    setDocumentModel((current) => (current ? setActiveLayer(current, layerId) : current));
-  }, []);
+  const handleActiveLayerChange = useCallback(
+    (layerId: LayerId) => {
+      if (transformSession?.layerId === layerId) {
+        return;
+      }
+      setDocumentModel((current) => {
+        const base = transformSession?.before ?? current;
+        return base ? setActiveLayer(base, layerId) : base;
+      });
+      if (transformSession || warpSession) {
+        setTransformSession(null);
+        setWarpSession(null);
+        announce("EDIT / CANCELLED ON LAYER CHANGE");
+      }
+    },
+    [announce, transformSession, warpSession],
+  );
 
   const handleViewportStatus = useCallback((message: string) => announce(message), [announce]);
 
@@ -355,7 +679,16 @@ function App() {
       ? (documentModel?.layers.length ?? 0)
       : activePanel === "HISTORY"
         ? historySnapshot.applied.length
-        : 0;
+        : activePanel === "PROPERTIES" && documentModel
+          ? 1
+          : 0;
+  const interactionMode: RendererInteractionMode = warpSession
+    ? "none"
+    : transformSession
+      ? "transform"
+      : activeTool === "move"
+        ? "move"
+        : "none";
 
   if (import.meta.env.DEV && window.location.pathname === "/__gallery") {
     return <ComponentGallery />;
@@ -373,7 +706,7 @@ function App() {
             LE
           </span>
           <span className="brand-name">LiteEdit</span>
-          <span className="brand-version">V0.3 / LAYERS + HISTORY</span>
+          <span className="brand-version">V0.5 / MOVE + TRANSFORM</span>
         </div>
 
         <div className="command-actions" role="group" aria-label="Document commands">
@@ -404,7 +737,10 @@ function App() {
           <UiButton
             className="command-button command-button-new"
             tone="accent"
-            onClick={() => setNewDialogOpen(true)}
+            onClick={() => {
+              cancelActiveEdit();
+              setNewDialogOpen(true);
+            }}
           >
             NEW
           </UiButton>
@@ -435,6 +771,7 @@ function App() {
                   aria-label={`${tool.label} tool, shortcut ${tool.shortcut}`}
                   aria-pressed={activeTool === tool.id}
                   onClick={() => {
+                    cancelActiveEdit();
                     setActiveTool(tool.id);
                     announce(`ACTIVE TOOL / ${tool.label}`);
                   }}
@@ -476,10 +813,18 @@ function App() {
               model={documentModel}
               sources={documentSources}
               activeTool={activeTool}
+              interactionMode={interactionMode}
+              warpSession={
+                warpSession ? { layerId: warpSession.layerId, nodes: warpSession.nodes } : null
+              }
               zoomPercent={zoom}
               onZoomChange={setZoom}
               onPointerPosition={handlePointerPosition}
               onActiveLayerChange={handleActiveLayerChange}
+              onTransformGesture={handleTransformGesture}
+              onWarpNodesChange={(nodes) =>
+                setWarpSession((current) => (current ? { ...current, nodes } : current))
+              }
               onStatus={handleViewportStatus}
               onExportReady={handleExportReady}
             />
@@ -515,7 +860,12 @@ function App() {
           <Tabs
             options={panelOptions}
             value={activePanel}
-            onChange={(id) => setActivePanel(id as PanelId)}
+            onChange={(id) => {
+              if (id !== "PROPERTIES") {
+                cancelActiveEdit();
+              }
+              setActivePanel(id as PanelId);
+            }}
             ariaLabel="Inspector panels"
           />
           <div
@@ -528,25 +878,19 @@ function App() {
               <span>{activePanel}</span>
               <span className="panel-count">{String(panelCount).padStart(2, "0")}</span>
             </div>
-            {activePanel === "PROPERTIES" ? (
-              <div className="property-controls">
-                <NumericField
-                  label="ROTATION"
-                  value={rotation}
-                  min={-180}
-                  max={180}
-                  suffix="°"
-                  onChange={setRotation}
-                />
-                <SliderField
-                  label="ZOOM"
-                  value={zoom}
-                  min={5}
-                  max={3200}
-                  suffix="%"
-                  onChange={setZoom}
-                />
-              </div>
+            {activePanel === "PROPERTIES" && documentModel ? (
+              <TransformPanel
+                model={documentModel}
+                zoom={zoom}
+                transformActive={transformSession !== null}
+                warpActive={warpSession !== null}
+                onZoomChange={setZoom}
+                onBeginTransform={beginTransform}
+                onTransformChange={handleTransformChange}
+                onBeginWarp={beginWarp}
+                onCommit={commitActiveEdit}
+                onCancel={cancelActiveEdit}
+              />
             ) : activePanel === "LAYERS" && documentModel ? (
               <LayersPanel
                 model={documentModel}
@@ -630,9 +974,12 @@ function App() {
           {documentModel ? `${documentModel.width} × ${documentModel.height} PX` : "— × — PX"}
         </span>
         <span>POINTER / {getDocumentPointerLabel(pointerPosition)}</span>
-        <span>ACTIVE / {activeTool.toUpperCase()}</span>
+        <span>
+          ACTIVE /{" "}
+          {warpSession ? "WARP" : transformSession ? "TRANSFORM" : activeTool.toUpperCase()}
+        </span>
         <span>HISTORY / {historySnapshot.applied.length}</span>
-        <span className="status-bar-right">BUILD / PHASE 4</span>
+        <span className="status-bar-right">BUILD / PHASE 5</span>
       </footer>
 
       {toastMessage ? <Toast message={toastMessage} tone={toastTone} /> : null}

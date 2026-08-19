@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ComponentGallery } from "./ComponentGallery";
 import { DocumentViewport, getDocumentPointerLabel } from "./DocumentViewport";
 import { Phase1SpikeGallery } from "./Phase1SpikeGallery";
 import { getShortcutAction } from "./shortcuts";
 import { panels, tools, type PanelId, type ToolId } from "./tool-model";
+import { HistoryPanel } from "../components/panels/HistoryPanel";
+import { LayersPanel } from "../components/panels/LayersPanel";
 import {
   Dialog,
   NumericField,
@@ -16,26 +18,50 @@ import {
 } from "../components/primitives/Ui";
 import {
   createBlankDocument,
+  deleteLayerSubtree,
+  duplicateLayerSubtree,
+  getLayerById,
+  insertGroupLayer,
+  insertRasterLayer,
+  moveLayer,
+  moveLayerWithinParent,
+  outdentLayer,
+  renameLayer,
+  setActiveLayer,
+  setLayerLocked,
+  setLayerOpacity,
+  setLayerVisibility,
+  ungroupLayer,
+  wrapLayerInGroup,
   type DocumentBackground,
   type DocumentModel,
+  type LayerId,
 } from "../editor/document-model";
+import { StructuralHistory, type CommitHistoryOptions } from "../editor/history/structural-history";
 import {
   createBlankSource,
   createDocumentFromDecodedImage,
   decodeLocalImage,
   ImageImportError,
 } from "../editor/import-validation";
-import type { DocumentSource } from "../editor/renderer/fabric-adapter";
+import {
+  cloneRasterSource,
+  createRasterSourceMap,
+  createTransparentRasterSource,
+  type RasterSource,
+} from "../editor/raster/raster-sources";
 import type { Point } from "../editor/viewport";
 
 const panelOptions = panels.map((panel) => ({ id: panel, label: panel }));
 
 const panelCopy: Record<PanelId, string> = {
-  LAYERS: "Layer visibility and ordering stay local to this document.",
-  HISTORY: "Tile-level history will expose reversible local operations.",
+  LAYERS: "Create or open a document to manage its layer tree.",
+  HISTORY: "Structural edits appear here as reversible transactions.",
   PROPERTIES: "Viewport and document controls are ready for local raster work.",
   SWATCHES: "Color tokens stay local until the raster editing surface lands.",
 };
+
+type ToastTone = "info" | "success" | "warning";
 
 function App() {
   const [activeTool, setActiveTool] = useState<ToolId>("move");
@@ -44,9 +70,9 @@ function App() {
   const [rotation, setRotation] = useState(0);
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [toastTone, setToastTone] = useState<"info" | "success" | "warning">("info");
+  const [toastTone, setToastTone] = useState<ToastTone>("info");
   const [documentModel, setDocumentModel] = useState<DocumentModel | null>(null);
-  const [documentSource, setDocumentSource] = useState<DocumentSource | null>(null);
+  const [documentSources, setDocumentSources] = useState<Record<string, RasterSource> | null>(null);
   const [pointerPosition, setPointerPosition] = useState<Point | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [newDocumentWidth, setNewDocumentWidth] = useState(1920);
@@ -54,14 +80,80 @@ function App() {
   const [newDocumentBackground, setNewDocumentBackground] =
     useState<DocumentBackground>("transparent");
   const [exportReady, setExportReady] = useState(false);
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const historyRef = useRef(new StructuralHistory());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const exportHandlerRef = useRef<(() => void) | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+  const historySnapshot = useMemo(() => historyRef.current.snapshot(), [historyVersion]);
 
-  const announce = useCallback((message: string, tone: "info" | "success" | "warning" = "info") => {
+  const announce = useCallback((message: string, tone: ToastTone = "info") => {
     setToastMessage(message);
     setToastTone(tone);
-    window.setTimeout(() => setToastMessage(null), 2400);
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => setToastMessage(null), 2400);
   }, []);
+
+  useEffect(
+    () => () => {
+      if (toastTimerRef.current !== null) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const refreshHistory = useCallback(() => {
+    setHistoryVersion((version) => version + 1);
+  }, []);
+
+  const commitDocument = useCallback(
+    (
+      label: string,
+      next: DocumentModel,
+      options: CommitHistoryOptions = {},
+      tone: ToastTone = "success",
+    ) => {
+      if (!documentModel) {
+        return false;
+      }
+      const committed = historyRef.current.commit(label, documentModel, next, options);
+      if (!committed) {
+        return false;
+      }
+      setDocumentModel(next);
+      refreshHistory();
+      announce(label.toUpperCase(), tone);
+      return true;
+    },
+    [announce, documentModel, refreshHistory],
+  );
+
+  const handleUndo = useCallback(() => {
+    const label = historyRef.current.snapshot().applied.at(-1)?.label;
+    const restored = historyRef.current.undo();
+    if (!restored) {
+      announce(documentModel ? "UNDO / AT DOCUMENT START" : "UNDO / NO DOCUMENT LOADED");
+      return;
+    }
+    setDocumentModel(restored);
+    refreshHistory();
+    announce(`UNDO / ${label ?? "EDIT"}`);
+  }, [announce, documentModel, refreshHistory]);
+
+  const handleRedo = useCallback(() => {
+    const label = historyRef.current.snapshot().redo[0]?.label;
+    const restored = historyRef.current.redo();
+    if (!restored) {
+      announce(documentModel ? "REDO / NO PENDING EDIT" : "REDO / NO DOCUMENT LOADED");
+      return;
+    }
+    setDocumentModel(restored);
+    refreshHistory();
+    announce(`REDO / ${label ?? "EDIT"}`);
+  }, [announce, documentModel, refreshHistory]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -71,25 +163,22 @@ function App() {
       }
 
       event.preventDefault();
-
       switch (action.type) {
         case "tool":
           setActiveTool(action.tool);
           announce(`ACTIVE TOOL / ${action.tool.toUpperCase()}`);
           break;
         case "undo":
-          announce(documentModel ? "UNDO / HISTORY NOT READY" : "UNDO / NO DOCUMENT LOADED");
+          handleUndo();
           break;
         case "redo":
-          announce(documentModel ? "REDO / HISTORY NOT READY" : "REDO / NO DOCUMENT LOADED");
+          handleRedo();
           break;
         case "clear-selection":
           announce("SELECTION / CLEARED");
           break;
         case "transform":
-          announce(
-            documentModel ? "TRANSFORM / EDITOR NOT READY" : "TRANSFORM / WAITING FOR DOCUMENT",
-          );
+          announce(documentModel ? "TRANSFORM / PHASE 5" : "TRANSFORM / WAITING FOR DOCUMENT");
           break;
         case "cancel":
           setNewDialogOpen(false);
@@ -100,20 +189,22 @@ function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [announce, documentModel]);
+  }, [announce, documentModel, handleRedo, handleUndo]);
 
   const setDocument = useCallback(
-    (model: DocumentModel, source: DocumentSource, message: string) => {
+    (model: DocumentModel, source: RasterSource, message: string) => {
+      historyRef.current.clear();
       setDocumentModel(model);
-      setDocumentSource(source);
+      setDocumentSources(createRasterSourceMap(model, source));
       setPointerPosition(null);
       setImportError(null);
       setExportReady(false);
       setZoom(100);
       setRotation(0);
+      refreshHistory();
       announce(message, "success");
     },
-    [announce],
+    [announce, refreshHistory],
   );
 
   const handleFile = useCallback(
@@ -172,6 +263,76 @@ function App() {
     }
   };
 
+  const handleAddRaster = () => {
+    if (!documentModel) {
+      return;
+    }
+    try {
+      const result = insertRasterLayer(documentModel);
+      const source = createTransparentRasterSource(documentModel.width, documentModel.height);
+      setDocumentSources((current) => ({
+        ...(current ?? {}),
+        [result.layer.bufferId]: source,
+      }));
+      commitDocument(`Add: ${result.layer.name}`, result.document);
+    } catch (error) {
+      announce(
+        error instanceof Error ? error.message : "The layer could not be created.",
+        "warning",
+      );
+    }
+  };
+
+  const handleDuplicate = (layerId: LayerId) => {
+    if (!documentModel || !documentSources) {
+      return;
+    }
+    try {
+      const result = duplicateLayerSubtree(documentModel, layerId);
+      const sourceUpdates: Record<string, RasterSource> = {};
+      for (const copy of result.bufferCopies) {
+        const source = documentSources[copy.sourceBufferId];
+        const sourceLayer = documentModel.layers.find(
+          (layer) => layer.kind === "raster" && layer.bufferId === copy.sourceBufferId,
+        );
+        if (!source || !sourceLayer || sourceLayer.kind !== "raster") {
+          throw new Error("The raster source could not be duplicated.");
+        }
+        sourceUpdates[copy.targetBufferId] = cloneRasterSource(
+          source,
+          sourceLayer.width,
+          sourceLayer.height,
+        );
+      }
+      setDocumentSources((current) => ({ ...(current ?? {}), ...sourceUpdates }));
+      commitDocument(`Duplicate: ${getLayerById(documentModel, layerId).name}`, result.document);
+    } catch (error) {
+      announce(
+        error instanceof Error ? error.message : "The layer could not be duplicated.",
+        "warning",
+      );
+    }
+  };
+
+  const runLayerCommand = (
+    label: string,
+    operation: (model: DocumentModel) => DocumentModel,
+    options: CommitHistoryOptions = {},
+  ) => {
+    if (!documentModel) {
+      return;
+    }
+    try {
+      commitDocument(label, operation(documentModel), options);
+    } catch (error) {
+      announce(error instanceof Error ? error.message : "The layer command failed.", "warning");
+    }
+  };
+
+  const handleActiveLayerChange = useCallback((layerId: LayerId) => {
+    setDocumentModel((current) => (current ? setActiveLayer(current, layerId) : current));
+  }, []);
+
   const handleViewportStatus = useCallback((message: string) => announce(message), [announce]);
 
   const handleExportReady = useCallback((handler: (() => void) | null) => {
@@ -189,6 +350,12 @@ function App() {
     Number.isInteger(newDocumentHeight) &&
     newDocumentWidth > 0 &&
     newDocumentHeight > 0;
+  const panelCount =
+    activePanel === "LAYERS"
+      ? (documentModel?.layers.length ?? 0)
+      : activePanel === "HISTORY"
+        ? historySnapshot.applied.length
+        : 0;
 
   if (import.meta.env.DEV && window.location.pathname === "/__gallery") {
     return <ComponentGallery />;
@@ -206,7 +373,7 @@ function App() {
             LE
           </span>
           <span className="brand-name">LiteEdit</span>
-          <span className="brand-version">V0.2 / TECHNICAL SHELL</span>
+          <span className="brand-version">V0.3 / LAYERS + HISTORY</span>
         </div>
 
         <div className="command-actions" role="group" aria-label="Document commands">
@@ -220,8 +387,19 @@ function App() {
           >
             EXPORT
           </UiButton>
-          <UiButton className="command-button" disabled>
+          <UiButton
+            className="command-button"
+            disabled={!historySnapshot.canUndo}
+            onClick={handleUndo}
+          >
             UNDO
+          </UiButton>
+          <UiButton
+            className="command-button"
+            disabled={!historySnapshot.canRedo}
+            onClick={handleRedo}
+          >
+            REDO
           </UiButton>
           <UiButton
             className="command-button command-button-new"
@@ -258,7 +436,7 @@ function App() {
                   aria-pressed={activeTool === tool.id}
                   onClick={() => {
                     setActiveTool(tool.id);
-                    setToastMessage(`ACTIVE TOOL / ${tool.label}`);
+                    announce(`ACTIVE TOOL / ${tool.label}`);
                   }}
                 >
                   <span className="tool-glyph" aria-hidden="true">
@@ -280,8 +458,10 @@ function App() {
           className="canvas-zone"
           aria-label="Editor viewport"
           onDragOver={(event) => {
-            event.preventDefault();
-            event.dataTransfer.dropEffect = "copy";
+            if (event.dataTransfer.types.includes("Files")) {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+            }
           }}
           onDrop={handleDrop}
         >
@@ -291,14 +471,15 @@ function App() {
             <span>1000</span>
             <span>1500</span>
           </div>
-          {documentModel && documentSource ? (
+          {documentModel && documentSources ? (
             <DocumentViewport
               model={documentModel}
-              source={documentSource}
+              sources={documentSources}
               activeTool={activeTool}
               zoomPercent={zoom}
               onZoomChange={setZoom}
               onPointerPosition={handlePointerPosition}
+              onActiveLayerChange={handleActiveLayerChange}
               onStatus={handleViewportStatus}
               onExportReady={handleExportReady}
             />
@@ -313,7 +494,7 @@ function App() {
                 Open a PNG, JPEG, or WebP file to begin. Processing stays in this browser.
               </p>
               <UiButton className="primary-action" tone="accent" onClick={openFilePicker}>
-                OPEN IMAGE // PHASE 3
+                OPEN IMAGE // LOCAL
               </UiButton>
               {importError ? <p className="import-error">{importError}</p> : null}
               <p className="privacy-line">
@@ -345,7 +526,7 @@ function App() {
           >
             <div className="panel-heading">
               <span>{activePanel}</span>
-              <span className="panel-count">00</span>
+              <span className="panel-count">{String(panelCount).padStart(2, "0")}</span>
             </div>
             {activePanel === "PROPERTIES" ? (
               <div className="property-controls">
@@ -367,18 +548,71 @@ function App() {
                 />
               </div>
             ) : activePanel === "LAYERS" && documentModel ? (
-              <div className="document-layer-summary">
-                <div className="layer-row is-active">
-                  <span className="layer-visibility" aria-hidden="true">
-                    ●
-                  </span>
-                  <span className="layer-name">{documentModel.layers[0]?.name}</span>
-                  <span className="layer-type">RASTER</span>
-                </div>
-                <span className="panel-empty-code">
-                  {documentModel.layers.length} LAYER / LOCAL DOCUMENT
-                </span>
-              </div>
+              <LayersPanel
+                model={documentModel}
+                onActivate={handleActiveLayerChange}
+                onAddRaster={handleAddRaster}
+                onAddGroup={() => {
+                  if (!documentModel) return;
+                  const result = insertGroupLayer(documentModel);
+                  commitDocument(`Add: ${result.layer.name}`, result.document);
+                }}
+                onDuplicate={handleDuplicate}
+                onDelete={(layerId) =>
+                  runLayerCommand(`Delete: ${getLayerById(documentModel, layerId).name}`, (model) =>
+                    deleteLayerSubtree(model, layerId),
+                  )
+                }
+                onGroup={(layerId) =>
+                  runLayerCommand("Group layers", (model) => wrapLayerInGroup(model, layerId))
+                }
+                onUngroup={(layerId) =>
+                  runLayerCommand("Ungroup layers", (model) => ungroupLayer(model, layerId))
+                }
+                onRename={(layerId, name) =>
+                  runLayerCommand(`Rename: ${name.trim()}`, (model) =>
+                    renameLayer(model, layerId, name),
+                  )
+                }
+                onToggleVisibility={(layerId, visible) =>
+                  runLayerCommand(
+                    `${visible ? "Show" : "Hide"}: ${getLayerById(documentModel, layerId).name}`,
+                    (model) => setLayerVisibility(model, layerId, visible),
+                  )
+                }
+                onToggleLock={(layerId, locked) =>
+                  runLayerCommand(
+                    `${locked ? "Lock" : "Unlock"}: ${getLayerById(documentModel, layerId).name}`,
+                    (model) => setLayerLocked(model, layerId, locked),
+                  )
+                }
+                onOpacityChange={(layerId, opacity) =>
+                  runLayerCommand(
+                    `Opacity: ${Math.round(opacity * 100)}%`,
+                    (model) => setLayerOpacity(model, layerId, opacity),
+                    { coalesceKey: `opacity:${layerId}` },
+                  )
+                }
+                onMoveWithinParent={(layerId, direction) =>
+                  runLayerCommand(
+                    `Reorder: ${getLayerById(documentModel, layerId).name}`,
+                    (model) => moveLayerWithinParent(model, layerId, direction),
+                  )
+                }
+                onMove={(layerId, parentId, index) =>
+                  runLayerCommand(`Move: ${getLayerById(documentModel, layerId).name}`, (model) =>
+                    moveLayer(model, layerId, parentId, index),
+                  )
+                }
+                onOutdent={(layerId) =>
+                  runLayerCommand(
+                    `Outdent: ${getLayerById(documentModel, layerId).name}`,
+                    (model) => outdentLayer(model, layerId),
+                  )
+                }
+              />
+            ) : activePanel === "HISTORY" && documentModel ? (
+              <HistoryPanel snapshot={historySnapshot} onUndo={handleUndo} onRedo={handleRedo} />
             ) : (
               <div className="panel-empty">
                 <span className="panel-empty-code">// WAITING FOR DOCUMENT</span>
@@ -397,7 +631,8 @@ function App() {
         </span>
         <span>POINTER / {getDocumentPointerLabel(pointerPosition)}</span>
         <span>ACTIVE / {activeTool.toUpperCase()}</span>
-        <span className="status-bar-right">BUILD / PHASE 3</span>
+        <span>HISTORY / {historySnapshot.applied.length}</span>
+        <span className="status-bar-right">BUILD / PHASE 4</span>
       </footer>
 
       {toastMessage ? <Toast message={toastMessage} tone={toastTone} /> : null}

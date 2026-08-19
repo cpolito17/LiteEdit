@@ -14,7 +14,8 @@ describe("LiteEdit bootstrap shell", () => {
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "OPEN" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "EXPORT" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "OPEN IMAGE // PHASE 3" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "OPEN IMAGE // LOCAL" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "REDO" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /BRUSH tool/i })).toHaveAttribute(
       "aria-pressed",
       "false",

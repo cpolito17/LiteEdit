@@ -407,6 +407,9 @@ function withLayerUpdate(
 
 export function setActiveLayer(document: DocumentModel, layerId: LayerId): DocumentModel {
   getLayerById(document, layerId);
+  if (document.activeLayerId === layerId) {
+    return document;
+  }
   return { ...document, activeLayerId: layerId };
 }
 

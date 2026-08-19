@@ -10,12 +10,16 @@ test("moves, commits or cancels transforms, and round-trips a raster warp", asyn
 
   const interactionCanvas = page.locator("canvas.upper-canvas");
   await expect(interactionCanvas).toBeVisible();
+  await page.getByRole("button", { name: "Fit document" }).click();
   const canvasBounds = await interactionCanvas.boundingBox();
   if (!canvasBounds) throw new Error("Expected an interactive canvas.");
   const center = {
     x: canvasBounds.x + canvasBounds.width / 2,
     y: canvasBounds.y + canvasBounds.height / 2,
   };
+  await page.mouse.move(center.x, center.y);
+  await expect(page.getByText("POINTER / X 0032 / Y 0032", { exact: true })).toBeVisible();
+  await page.mouse.click(center.x, center.y);
   await page.mouse.move(center.x, center.y);
   await page.mouse.down();
   await page.mouse.move(center.x + 24, center.y + 12, { steps: 4 });

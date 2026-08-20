@@ -15,6 +15,7 @@ import {
   moveLayerWithinParent,
   outdentLayer,
   renameLayer,
+  setActiveLayer,
   setLayerOpacity,
   setLayerVisibility,
   ungroupLayer,
@@ -43,6 +44,16 @@ describe("document model", () => {
       opacity: 1,
     });
     expect(document.activeLayerId).toBe(document.layers[0]?.id);
+  });
+
+  it("keeps the document reference stable when the active layer is reselected", () => {
+    const document = createBlankDocument({
+      width: 64,
+      height: 64,
+      background: "transparent",
+    });
+
+    expect(setActiveLayer(document, document.activeLayerId)).toBe(document);
   });
 
   it("rejects dimensions before a document can be allocated", () => {

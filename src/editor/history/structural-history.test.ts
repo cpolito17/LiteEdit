@@ -19,6 +19,7 @@ import {
   type DocumentModel,
 } from "../document-model";
 import { StructuralHistory } from "./structural-history";
+import type { RasterSnapshot } from "../raster/raster-snapshot";
 
 describe("structural history", () => {
   it("round-trips a scripted 25-operation layer sequence", () => {
@@ -80,13 +81,13 @@ describe("structural history", () => {
     const finalHash = serializeDocumentModel(current);
 
     for (let index = 0; index < 25; index += 1) {
-      current = history.undo() ?? current;
+      current = history.undo()?.document ?? current;
     }
     expect(serializeDocumentModel(current)).toBe(serializeDocumentModel(initial));
     expect(history.snapshot().canUndo).toBe(false);
 
     for (let index = 0; index < 25; index += 1) {
-      current = history.redo() ?? current;
+      current = history.redo()?.document ?? current;
     }
     expect(serializeDocumentModel(current)).toBe(finalHash);
     expect(history.snapshot().canRedo).toBe(false);
@@ -108,7 +109,7 @@ describe("structural history", () => {
       committedAt: 1100,
     });
     expect(history.snapshot().applied).toHaveLength(1);
-    expect(history.undo()?.layers[0]?.opacity).toBe(1);
+    expect(history.undo()?.document.layers[0]?.opacity).toBe(1);
     expect(history.snapshot().canRedo).toBe(true);
 
     const branched = renameLayer(initial, layerId, "Branched");
@@ -131,6 +132,42 @@ describe("structural history", () => {
       "Rename 3",
       "Rename 4",
       "Rename 5",
+    ]);
+  });
+
+  it("stores raster edits as one byte-accounted transaction and restores exact pixels", () => {
+    const history = new StructuralHistory();
+    const model = createBlankDocument({ width: 2, height: 1, background: "transparent" });
+    const layer = model.layers[0];
+    if (!layer || layer.kind !== "raster") throw new Error("Expected a raster layer.");
+    const before: RasterSnapshot = {
+      width: 2,
+      height: 1,
+      pixels: new Uint8ClampedArray([255, 0, 0, 255, 0, 0, 255, 255]),
+    };
+    const after: RasterSnapshot = {
+      width: 2,
+      height: 1,
+      pixels: new Uint8ClampedArray([0, 255, 0, 255, 255, 255, 0, 255]),
+    };
+
+    expect(
+      history.commit("Warp", model, model, {
+        rasterChanges: [{ bufferId: layer.bufferId, before, after }],
+      }),
+    ).toBe(true);
+    expect(history.snapshot().applied).toHaveLength(1);
+    expect(history.snapshot().estimatedBytes).toBeGreaterThanOrEqual(
+      before.pixels.byteLength + after.pixels.byteLength,
+    );
+
+    before.pixels.fill(0);
+    after.pixels.fill(0);
+    expect([...(history.undo()?.rasterChanges[0]?.snapshot.pixels ?? [])]).toEqual([
+      255, 0, 0, 255, 0, 0, 255, 255,
+    ]);
+    expect([...(history.redo()?.rasterChanges[0]?.snapshot.pixels ?? [])]).toEqual([
+      0, 255, 0, 255, 255, 255, 0, 255,
     ]);
   });
 });

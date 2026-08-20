@@ -43,8 +43,50 @@ describe("LiteEdit bootstrap shell", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "NEW DOCUMENT" })).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "NEW" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "WIDTH" }), {
+      target: { value: "64" },
+    });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "HEIGHT" }), {
+      target: { value: "64" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "CREATE BLANK" }));
     fireEvent.click(screen.getByRole("tab", { name: "PROPERTIES" }));
     expect(screen.getByRole("spinbutton", { name: "ROTATION" })).toHaveValue(0);
-    expect(screen.getByRole("slider", { name: "ZOOM" })).toHaveValue("100");
+    expect(screen.getByRole("slider", { name: "VIEW ZOOM" })).toBeEnabled();
+  });
+
+  it("cancels and commits numeric transforms as single transactions", () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "NEW" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "WIDTH" }), {
+      target: { value: "32" },
+    });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "HEIGHT" }), {
+      target: { value: "32" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "CREATE BLANK" }));
+    fireEvent.click(screen.getByRole("tab", { name: "PROPERTIES" }));
+
+    const rotation = screen.getByRole("spinbutton", { name: "ROTATION" });
+    expect(rotation).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "TRANSFORM" }));
+    fireEvent.change(rotation, { target: { value: "45" } });
+    expect(rotation).toHaveValue(45);
+    fireEvent.keyDown(rotation, { key: "Escape" });
+    expect(rotation).toHaveValue(0);
+    expect(rotation).toBeDisabled();
+    expect(screen.getByText("HISTORY / 0")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "TRANSFORM" }));
+    fireEvent.change(rotation, { target: { value: "45" } });
+    fireEvent.keyDown(rotation, { key: "Enter" });
+    expect(rotation).toHaveValue(45);
+    expect(rotation).toBeDisabled();
+    expect(screen.getByText("HISTORY / 1")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "TRANSFORM" }));
+    fireEvent.click(screen.getByRole("button", { name: "COMMIT" }));
+    expect(screen.getByText("HISTORY / 1")).toBeVisible();
   });
 });

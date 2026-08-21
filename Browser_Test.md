@@ -1,6 +1,6 @@
 # LiteEdit Browser Test Plan
 
-This document covers the browser checks for the implemented Phase 0-5 work, the unresolved Phase 1 technical gate, the Phase 3 local document workflow, Phase 4 layers and structural history, and Phase 5 transforms.
+This document covers the browser checks for the Phase 0-10 v1 release candidate and its unresolved empirical evidence gates.
 
 Do not mark a check as `PASS` when the feature is only covered by a jsdom or unit test. Use `BLOCKED` when the required browser or test harness is not available.
 
@@ -67,7 +67,7 @@ Run each check at `1024 x 768`, `1440 x 900`, and `1920 x 1080`.
 | SHELL-04 | Inspect the left tool rail.                       | All ten tools are visible: Move, Marquee, Lasso, Select, Brush, Shape, Eraser, Crop, Picker, and Hand. Each is a button with an accessible name, shortcut text, visible focus state, and `aria-pressed`. |
 | SHELL-05 | Inspect the empty canvas state.                   | `LOCAL IMAGE WORKBENCH`, the no-document message, the local-processing notice, viewport rulers, and zoom status are visible. `OPEN IMAGE // LOCAL` is enabled.                                           |
 | SHELL-06 | Inspect the right inspector.                      | The four tabs `LAYERS`, `HISTORY`, `PROPERTIES`, and `SWATCHES` are visible. The active tab is clear without relying on color alone.                                                                     |
-| SHELL-07 | Inspect the bottom status bar.                    | Document, size, pointer, active-tool, history, and `BUILD / PHASE 5` status text are visible and readable.                                                                                               |
+| SHELL-07 | Inspect the bottom status bar.                    | Document, size, pointer, active-tool, history, selection, memory, and `BUILD / V1 RELEASE` status text are visible and readable.                                                                         |
 | SHELL-08 | Inspect the shell at normal and high-DPI scaling. | Text remains legible. Controls remain at least 32 px high where applicable. No control overlaps another.                                                                                                 |
 
 ## 4. Keyboard and focus checks
@@ -131,7 +131,7 @@ Use a small PNG, JPEG, and WebP fixture that is permitted for local testing. Do 
 
 | ID     | Action                                                                                                   | Expected outcome                                                                                                                                              |
 | ------ | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| DOC-01 | Click `OPEN` or `OPEN IMAGE // LOCAL`, then choose a PNG, JPEG, or WebP file.                            | The image opens in the editor as one visible raster layer. The document name, pixel dimensions, layer name, and `BUILD / PHASE 5` status update.              |
+| DOC-01 | Click `OPEN` or `OPEN IMAGE // LOCAL`, then choose a PNG, JPEG, or WebP file.                            | The image opens in the editor as one visible raster layer. The document name, pixel dimensions, layer name, and `BUILD / V1 RELEASE` status update.           |
 | DOC-02 | Drag a supported PNG, JPEG, or WebP file over the canvas zone and release it.                            | The same local import path opens the document. No page navigation or browser file upload occurs.                                                              |
 | DOC-03 | Try a GIF, a file with a mismatched image type, and a file larger than the documented local limit.       | LiteEdit rejects each file before creating a document and shows a readable warning. The existing document, if any, remains unchanged.                         |
 | DOC-04 | Click `NEW`, enter valid width and height values, choose Transparent, White, and Black, and create each. | A blank document opens at the requested size. Transparent keeps the canvas alpha; White and Black fill the backing canvas.                                    |
@@ -181,7 +181,50 @@ Use a small asymmetric image with opaque pixels reaching every edge. Keep the Pr
 | PRIV-02  | Keep the Network panel open for MOVE-01 through WARP-03.                                                               | No image, mesh, model, or history bytes leave the browser.                                                                                                       |
 | PERF-01  | On the recorded reference machine, preview a transform on a 4096 x 4096 image and capture a browser performance trace. | Preview targets 60 fps and does not fall below the accepted 45 fps floor. Record hardware, OS, browser version, device-pixel ratio, and trace evidence.          |
 
-## 11. Feedback format
+## 11. Phase 6 brush, eraser, and color
+
+| ID       | Action                                                                                  | Expected outcome                                                                                                              |
+| -------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| PAINT-01 | Draw a fast diagonal brush stroke, then undo and redo.                                  | The stroke has no spacing gaps, creates one History row, and restores exact pixels in both directions.                        |
+| PAINT-02 | Draw continuously for ten seconds with pressure, then erase through part of the stroke. | Brush size follows pressure where supported, mouse fallback stays stable, and each pointer gesture creates one transaction.   |
+| COLOR-01 | Pick a composite color, swap/reset foreground/background, and save/remove a swatch.     | HEX/RGB match the visible composite; recent and saved swatches update, and saved swatches survive reload.                     |
+| PERF-02  | Paint continuously on a 4096 × 4096 document while recording performance and memory.    | Pointer feedback remains usable, raster changes use dirty tiles, and History/Memory reporting remains bounded and responsive. |
+
+## 12. Phase 7 vector shapes
+
+| ID        | Action                                                                                      | Expected outcome                                                                                                   |
+| --------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| VECTOR-01 | Draw every shape with fill/stroke, Shift constraint, and Alt center drawing; then export.   | Rectangle, ellipse, triangle, polygon, star, line, and arrow export at the bounds and style shown in the editor.   |
+| VECTOR-02 | Select a vector row and edit kind, fill, stroke, width, and sides; undo and redo the edits. | Each property remains editable while vector, history coalesces rapid input, and undo/redo restores exact geometry. |
+| VECTOR-03 | Rasterize a root vector layer and undo/redo.                                                | The visible result is preserved, the row changes between vector/raster, and pixels round-trip through history.     |
+
+## 13. Phase 8 selection
+
+| ID      | Action                                                                                                  | Expected outcome                                                                                                         |
+| ------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| SEL-01  | Create marquee and lasso masks; repeat with add, subtract, intersect, invert, and clear.                | The animated document-coordinate overlay and status bounds match each Boolean operation.                                 |
+| SEL-02  | Quick-select with several tolerance/brush-size values; paint, erase, Delete, crop, and export selected. | Worker results stay responsive and every edit is clipped to the mask or its selected export bounds.                      |
+| SEL-03  | Start Object Selection, then edit or replace the document before it finishes.                           | The old worker result is cancelled and cannot apply to the new pixels.                                                   |
+| GATE-04 | Run Object Selection against five approved representative local photos and record timings.              | At least four foreground subjects isolate acceptably within two seconds; otherwise Object Selection remains provisional. |
+
+## 14. Phase 9 crop, resize, and export
+
+| ID        | Action                                                                                   | Expected outcome                                                                                                        |
+| --------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| OUTPUT-01 | Crop with free and fixed-aspect presets plus numeric bounds; undo and redo.              | Document dimensions and root offsets are exact; cancel is mutation-free; undo/redo restores the prior bounds.           |
+| OUTPUT-02 | Resize with linked/unlinked dimensions and every resampling choice; undo and redo.       | Requested dimensions are exact, 8192 px limits are enforced before allocation, and history restores the prior document. |
+| OUTPUT-03 | Export PNG alpha and JPEG with matte, quality, and achievable/unachievable target sizes. | PNG retains alpha; JPEG uses the matte; target results are within 5% when attainable and otherwise say not met.         |
+
+## 15. Phase 10 recovery and release
+
+| ID      | Action                                                                                           | Expected outcome                                                                                                 |
+| ------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| HARD-01 | Edit, wait for recovery, reload, restore, then repeat with a deliberately corrupt local record.  | Valid state restores; corrupt data is discarded with a readable warning and never blocks a clean start.          |
+| HARD-02 | Trigger the error boundary in a development build and export a diagnostic.                       | The app provides reload/diagnostic actions; the JSON contains metadata and no image pixels.                      |
+| HARD-03 | Run axe, keyboard-only, and reduced-motion checks in Chromium, Firefox, WebKit/Safari, and Edge. | Critical workflow passes in all four browsers with zero serious or critical accessibility findings.              |
+| PROD-01 | Complete the private-window production smoke at `https://liteedit.charliepolito.com`.            | HTTPS serves the recorded `main` commit; open/paint/undo/crop/export/recovery work with no image upload request. |
+
+## 16. Feedback format
 
 Return one row for every ID. Do not omit blocked or not-run checks.
 

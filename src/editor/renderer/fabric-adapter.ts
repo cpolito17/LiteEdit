@@ -1,7 +1,11 @@
 import {
   Canvas,
+  Ellipse,
   FabricImage,
   Group,
+  Path,
+  Polygon,
+  Rect,
   StaticCanvas,
   util,
   type FabricObject,
@@ -17,6 +21,7 @@ import {
 } from "../document-model";
 import type { RasterSource, RasterSourceMap } from "../raster/raster-sources";
 import { invertMatrix, multiplyMatrices } from "../transform";
+import { regularPolygonPoints, type ShapeKind } from "../vector/shape-geometry";
 import type { ViewportTransform } from "../viewport";
 
 export type DocumentSource = RasterSource;
@@ -31,6 +36,7 @@ export type TransformGesture = {
 
 type BuildOptions = {
   interactionMode: RendererInteractionMode;
+  imageSmoothing: boolean;
   register?: (layerId: LayerId, object: FabricObject, baseMatrix: Matrix2D) => void;
 };
 
@@ -92,6 +98,7 @@ function buildRasterObject(
   const sourceSize = getSourceSize(source);
   const image = new FabricImage(source, {
     left: 0,
+    imageSmoothing: options.imageSmoothing,
     objectCaching: false,
     opacity: layer.opacity,
     originX: "left",
@@ -108,6 +115,89 @@ function buildRasterObject(
   return image;
 }
 
+function numericProperty(
+  properties: Record<string, unknown>,
+  key: string,
+  fallback: number,
+): number {
+  const value = properties[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function stringProperty(
+  properties: Record<string, unknown>,
+  key: string,
+  fallback: string | null,
+): string | null {
+  const value = properties[key];
+  return typeof value === "string" ? value : value === null ? null : fallback;
+}
+
+function buildVectorObject(
+  layer: Extract<LayerNode, { kind: "vector" }>,
+  options: BuildOptions,
+): FabricObject {
+  const properties = layer.object.properties;
+  const kind = (properties.kind ?? "rectangle") as ShapeKind;
+  const left = numericProperty(properties, "left", 0);
+  const top = numericProperty(properties, "top", 0);
+  const width = Math.max(1, numericProperty(properties, "width", 100));
+  const height = Math.max(1, numericProperty(properties, "height", 100));
+  const fill = stringProperty(properties, "fill", "#70ffd2");
+  const stroke = stringProperty(properties, "stroke", "#101719");
+  const strokeWidth = Math.max(0, numericProperty(properties, "strokeWidth", 2));
+  const common = {
+    fill: kind === "line" || kind === "arrow" ? null : fill,
+    objectCaching: true,
+    opacity: layer.opacity,
+    stroke,
+    strokeWidth,
+    visible: layer.visible,
+  };
+  let object: FabricObject;
+  if (kind === "ellipse") {
+    object = new Ellipse({ ...common, left, top, rx: width / 2, ry: height / 2 });
+  } else if (kind === "triangle" || kind === "polygon" || kind === "star") {
+    const sides = kind === "triangle" ? 3 : numericProperty(properties, "sides", 5);
+    object = new Polygon(
+      regularPolygonPoints(
+        { x: width / 2, y: height / 2 },
+        width / 2,
+        height / 2,
+        sides,
+        kind === "star" ? 0.45 : 1,
+      ),
+      { ...common, left, top },
+    );
+  } else if (kind === "line" || kind === "arrow") {
+    const startX = numericProperty(properties, "startX", left);
+    const startY = numericProperty(properties, "startY", top);
+    const endX = numericProperty(properties, "endX", left + width);
+    const endY = numericProperty(properties, "endY", top + height);
+    const angle = Math.atan2(endY - startY, endX - startX);
+    const head = Math.max(8, strokeWidth * 4);
+    const path =
+      kind === "arrow"
+        ? `M ${startX} ${startY} L ${endX} ${endY} M ${endX} ${endY} L ${endX - Math.cos(angle - Math.PI / 6) * head} ${endY - Math.sin(angle - Math.PI / 6) * head} M ${endX} ${endY} L ${endX - Math.cos(angle + Math.PI / 6) * head} ${endY - Math.sin(angle + Math.PI / 6) * head}`
+        : `M ${startX} ${startY} L ${endX} ${endY}`;
+    object = new Path(path, {
+      ...common,
+      fill: null,
+      left,
+      strokeLineCap: "round",
+      strokeLineJoin: "round",
+      top,
+    });
+  } else {
+    object = new Rect({ ...common, left, top, width, height });
+  }
+  const baseMatrix = toMatrix(object.calcOwnMatrix());
+  applyModelTransform(object, layer, baseMatrix);
+  applyInteractionState(object, options.interactionMode, layer.locked);
+  options.register?.(layer.id, object, baseMatrix);
+  return object;
+}
+
 function buildLayerObject(
   layerId: LayerId,
   documentModel: DocumentModel,
@@ -119,7 +209,7 @@ function buildLayerObject(
     return buildRasterObject(layer, sources, options);
   }
   if (layer.kind === "vector") {
-    return null;
+    return buildVectorObject(layer, options);
   }
 
   const children = layer.childIds
@@ -156,23 +246,28 @@ function normalizeGestureAction(action: string | undefined): TransformGesture["a
   return "transform";
 }
 
-function renderDocumentCanvas(
+export function renderDocumentCanvas(
   documentModel: DocumentModel,
   sources: DocumentSources,
 ): HTMLCanvasElement {
+  const resampling = documentModel.resampling ?? "high";
   const element = document.createElement("canvas");
   const exportCanvas = new StaticCanvas(element, {
     enableRetinaScaling: false,
     height: documentModel.height,
+    imageSmoothingEnabled: resampling !== "nearest",
     renderOnAddRemove: false,
     width: documentModel.width,
   });
   try {
     exportCanvas.add(
       ...buildRootObjects(documentModel, sources, {
+        imageSmoothing: resampling !== "nearest",
         interactionMode: "none",
       }),
     );
+    exportCanvas.getContext().imageSmoothingQuality =
+      resampling === "high" ? "high" : resampling === "bilinear" ? "medium" : "low";
     exportCanvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
     exportCanvas.renderAll();
     const output = document.createElement("canvas");
@@ -182,6 +277,9 @@ function renderDocumentCanvas(
     if (!context) {
       throw new Error("The browser did not provide a 2D canvas context.");
     }
+    context.imageSmoothingEnabled = resampling !== "nearest";
+    context.imageSmoothingQuality =
+      resampling === "high" ? "high" : resampling === "bilinear" ? "medium" : "low";
     context.drawImage(exportCanvas.getElement(), 0, 0);
     return output;
   } finally {
@@ -261,6 +359,10 @@ export class FabricRendererAdapter {
   }
 
   setDocument(documentModel: DocumentModel, sources: DocumentSources): void {
+    const resampling = documentModel.resampling ?? "high";
+    this.canvas.imageSmoothingEnabled = resampling !== "nearest";
+    this.canvas.getContext().imageSmoothingQuality =
+      resampling === "high" ? "high" : resampling === "bilinear" ? "medium" : "low";
     this.canvas.discardActiveObject();
     this.canvas.clear();
     this.objectByLayerId = new Map();
@@ -269,6 +371,7 @@ export class FabricRendererAdapter {
     this.lockedByLayerId = new Map();
 
     const objects = buildRootObjects(documentModel, sources, {
+      imageSmoothing: resampling !== "nearest",
       interactionMode: this.interactionMode,
       register: (layerId, object, baseMatrix) => {
         this.objectByLayerId.set(layerId, object);
@@ -279,6 +382,15 @@ export class FabricRendererAdapter {
     });
     this.canvas.add(...objects);
     this.setActiveLayer(documentModel.activeLayerId);
+    this.canvas.requestRenderAll();
+  }
+
+  updateRasterSource(layerId: LayerId, source: RasterSource): void {
+    const object = this.objectByLayerId.get(layerId);
+    if (!(object instanceof FabricImage)) return;
+    object.setElement(source);
+    object.dirty = true;
+    object.setCoords();
     this.canvas.requestRenderAll();
   }
 

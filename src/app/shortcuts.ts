@@ -8,6 +8,7 @@ export type ShortcutAction =
   | { type: "transform" }
   | { type: "commit" }
   | { type: "nudge"; x: number; y: number }
+  | { type: "clear-pixels" }
   | { type: "cancel" };
 
 const toolByShortcut = new Map(tools.map((tool) => [tool.shortcut.toLowerCase(), tool.id]));
@@ -71,6 +72,10 @@ export function getShortcutAction(event: KeyboardEvent): ShortcutAction | null {
       return { type: "transform" };
     }
     return null;
+  }
+
+  if (key === "delete" || key === "backspace") {
+    return { type: "clear-pixels" };
   }
 
   const distance = event.shiftKey ? 10 : 1;

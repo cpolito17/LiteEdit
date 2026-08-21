@@ -3,6 +3,7 @@ export const MAX_DOCUMENT_PIXELS = 32_000_000;
 export const DOCUMENT_SCHEMA_VERSION = 1;
 
 export type DocumentBackground = "transparent" | "white" | "black";
+export type DocumentResampling = "nearest" | "bilinear" | "high";
 export type LayerId = string;
 export type Matrix2D = [number, number, number, number, number, number];
 
@@ -49,6 +50,7 @@ export type DocumentModel = {
   width: number;
   height: number;
   background: DocumentBackground;
+  resampling: DocumentResampling;
   /** Sibling arrays are stored bottommost to topmost. */
   rootLayerIds: LayerId[];
   layers: LayerNode[];
@@ -141,6 +143,18 @@ function createLayerBase(name: string, parentId: LayerId | null): LayerBase {
   };
 }
 
+export function createVectorLayer(options: {
+  name: string;
+  object: SerializedVectorObject;
+  parentId?: LayerId | null;
+}): VectorLayer {
+  return {
+    ...createLayerBase(options.name, options.parentId ?? null),
+    kind: "vector",
+    object: cloneVectorObject(options.object),
+  };
+}
+
 export function createRasterLayer(options: {
   name: string;
   width: number;
@@ -190,6 +204,7 @@ export function createDocumentModel(options: {
     width: options.width,
     height: options.height,
     background: options.background,
+    resampling: "high",
     rootLayerIds: [layer.id],
     layers: [layer],
     activeLayerId: layer.id,
@@ -285,6 +300,12 @@ export function assertDocumentInvariant(document: DocumentModel): void {
 
   if (document.schemaVersion !== DOCUMENT_SCHEMA_VERSION) {
     throw new Error("Unsupported document schema version.");
+  }
+  if (
+    document.resampling !== undefined &&
+    !(["nearest", "bilinear", "high"] as const).includes(document.resampling)
+  ) {
+    throw new Error("Unsupported document resampling mode.");
   }
   if (document.layers.length === 0 || document.rootLayerIds.length === 0) {
     throw new Error("A document must contain at least one root layer.");
@@ -506,6 +527,75 @@ export function insertRasterLayer(
     options.index ?? (parentId === fallback.parentId ? fallback.index : siblings.length),
   );
   next.activeLayerId = layer.id;
+  assertDocumentInvariant(next);
+  return { document: next, layer };
+}
+
+export function insertVectorLayer(
+  document: DocumentModel,
+  options: {
+    name?: string;
+    object: SerializedVectorObject;
+    parentId?: LayerId | null;
+    index?: number;
+  },
+): { document: DocumentModel; layer: VectorLayer } {
+  const next = cloneDocumentModel(document);
+  const fallback = defaultInsertPosition(next);
+  const parentId = options.parentId === undefined ? fallback.parentId : options.parentId;
+  const siblings = getSiblingIds(next, parentId);
+  const layer = createVectorLayer({
+    name: options.name ?? "Shape",
+    object: options.object,
+    parentId,
+  });
+  next.layers.push(layer);
+  insertId(
+    siblings,
+    layer.id,
+    options.index ?? (parentId === fallback.parentId ? fallback.index : siblings.length),
+  );
+  next.activeLayerId = layer.id;
+  assertDocumentInvariant(next);
+  return { document: next, layer };
+}
+
+export function setVectorObject(
+  document: DocumentModel,
+  layerId: LayerId,
+  object: SerializedVectorObject,
+): DocumentModel {
+  return withLayerUpdate(document, layerId, (layer) => {
+    if (layer.kind !== "vector") throw new Error("Only vector layers have editable shape data.");
+    return { ...layer, object: cloneVectorObject(object) };
+  });
+}
+
+export function rasterizeRootVectorLayer(
+  document: DocumentModel,
+  layerId: LayerId,
+  bufferId = createBufferId(),
+): { document: DocumentModel; layer: RasterLayer } {
+  const next = cloneDocumentModel(document);
+  const current = getLayerById(next, layerId);
+  if (current.kind !== "vector") throw new Error("Only vector layers can be rasterized.");
+  if (current.parentId !== null) {
+    throw new Error("Move the vector layer to the document root before rasterizing it.");
+  }
+  const layer: RasterLayer = {
+    id: current.id,
+    parentId: null,
+    name: current.name,
+    visible: current.visible,
+    locked: current.locked,
+    opacity: 1,
+    transform: [...IDENTITY_MATRIX],
+    kind: "raster",
+    bufferId,
+    width: next.width,
+    height: next.height,
+  };
+  next.layers = next.layers.map((candidate) => (candidate.id === layerId ? layer : candidate));
   assertDocumentInvariant(next);
   return { document: next, layer };
 }

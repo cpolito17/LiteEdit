@@ -1,10 +1,10 @@
 # Known limitations
 
-- Phase 5 supports local PNG, JPEG, and browser-decodable WebP import, blank documents, viewport navigation, isolated PNG export, nested raster layers and groups, pointer move, keyboard nudge, affine layer transforms, a full-layer 3 x 3 raster warp, and bounded undo/redo.
-- The renderer rebuilds the Fabric scene after structural edits. Phase 6 must replace this coarse path for high-frequency raster invalidation.
-- Phase 5 raster history stores complete before/after snapshots for each warp. This is exact and byte-accounted but intentionally temporary; Phase 6 must introduce dirty tile patches and release buffers after their final retained transaction is evicted.
-- Warp currently affects one entire active raster layer. Selection-bounded transforms remain disabled until Phase 8 provides the selection mask store.
-- Vector layers, selection, paint, shapes, crop, resize, recovery, and JPEG export arrive in later gated phases.
-- The Soft Technical shell and Phase 5 transform workflow still require the real-browser checks in `Browser_Test.md`.
-- The Phase 1 browser harness does not select an Object Selection engine. It still needs five approved local photos and a second candidate with a quantized lazy-loaded segmentation model.
+- Object Selection uses a lazy-loaded, model-free foreground extractor. It is provisional until five approved representative photos establish at least four successful isolations under two seconds on the reference computer. Quick Selection, marquee, and lasso do not depend on that gate.
+- Selection lift for move/transform maps the selected raster into document pixels. It is exact for untransformed raster pixels; affine-transformed source pixels are resampled into the floating selection.
+- Crop and resize keep raster sources non-destructive and express the operation through document bounds and layer transforms. The selected browser interpolation mode applies during rendering/export rather than rewriting every source buffer.
+- JPEG target-size search reports when the requested size cannot be reached at the minimum quality. Automatic proportional dimension reduction remains an explicit user decision.
+- Heap reporting depends on the Chromium `performance.memory` extension; other browsers display `MEMORY / N/A`. History byte accounting is available everywhere.
+- Automated Chromium end-to-end coverage is included. Firefox, WebKit/Safari, Edge, keyboard-only, reduced-motion, and axe checks remain documented manual release evidence in `Browser_Test.md`.
+- The renderer still rebuilds the Fabric scene after structural edits. Live brush strokes update only the active raster backing canvas, avoiding a scene rebuild for each stamp.
 - Mobile and tablet layouts are not v1 targets.

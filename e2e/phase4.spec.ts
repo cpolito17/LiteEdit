@@ -33,5 +33,5 @@ test("manages layers, groups, and structural history", async ({ page }) => {
   await historyCommands.getByRole("button", { name: "UNDO" }).click();
   await expect(page.locator(".history-row.is-redo", { hasText: "Opacity: 50%" })).toBeVisible();
   await historyCommands.getByRole("button", { name: "REDO" }).click();
-  await expect(page.getByText("BUILD / PHASE 5")).toBeVisible();
+  await expect(page.getByText("BUILD / V1 RELEASE")).toBeVisible();
 });

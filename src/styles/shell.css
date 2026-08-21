@@ -290,6 +290,57 @@ button:disabled {
   height: 100% !important;
 }
 
+.selection-mask-overlay,
+.editor-overlay {
+  position: absolute !important;
+  z-index: 2;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none;
+}
+
+.editor-overlay {
+  overflow: visible;
+}
+
+.selection-ants,
+.draft-outline,
+.crop-outline,
+.brush-cursor {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.selection-ants {
+  stroke: var(--accent-lemon);
+  stroke-dasharray: 5 4;
+  stroke-width: 1;
+  animation: selection-march 700ms linear infinite;
+}
+
+.draft-outline {
+  stroke: var(--accent-mint);
+  stroke-dasharray: 4 3;
+  stroke-width: 1.5;
+}
+
+.crop-outline {
+  stroke: var(--accent-orange);
+  stroke-width: 2;
+}
+
+.brush-cursor {
+  stroke: rgb(255 255 255 / 88%);
+  stroke-width: 1;
+}
+
+@keyframes selection-march {
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+
 .warp-overlay {
   position: absolute;
   z-index: 3;
@@ -513,6 +564,171 @@ button:disabled {
   display: grid;
   gap: 20px;
   margin-top: 20px;
+}
+
+.tool-options-panel,
+.swatches-panel {
+  display: grid;
+  gap: 14px;
+  padding-top: 14px;
+  overflow: auto;
+}
+
+.tool-options-title {
+  margin: 0;
+  color: var(--accent-gold);
+  font-size: 9px;
+  letter-spacing: 0.09em;
+}
+
+.tool-options-help {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.tool-option-actions,
+.crop-presets,
+.swatch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tool-option-actions .ui-button,
+.crop-presets .ui-button,
+.swatch-actions .ui-button {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 7px;
+  font-size: 8px;
+}
+
+.option-row,
+.color-field,
+.select-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-muted);
+  font-size: 9px;
+  letter-spacing: 0.07em;
+}
+
+.color-field {
+  grid-template-columns: minmax(0, 1fr) 32px auto;
+}
+
+.color-field input[type="color"],
+.swatch-primary input[type="color"] {
+  width: 32px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.color-field code {
+  color: var(--accent-lemon);
+  font-size: 8px;
+}
+
+.select-field select,
+.new-document-background select {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+}
+
+.swatch-primary {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.swatch-primary label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--ink-muted);
+  font-size: 9px;
+}
+
+.swatch-primary code {
+  color: var(--accent-lemon);
+  font-size: 8px;
+}
+
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.swatch-grid > button,
+.saved-swatch > button:first-child {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+.saved-swatch {
+  position: relative;
+}
+
+.saved-swatch-remove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--surface-0);
+  border-radius: 50%;
+  background: var(--accent-orange);
+  color: var(--accent-ink);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.dialog-control-stack {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.crop-dimension-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 7px;
+}
+
+.fatal-error {
+  display: grid;
+  place-content: center;
+  min-height: 100vh;
+  padding: 32px;
+  background: var(--surface-0);
+  color: var(--ink);
+  text-align: center;
+}
+
+.fatal-error button {
+  min-height: 36px;
+  border: 1px solid var(--accent-mint);
+  border-radius: var(--radius-sm);
+  background: var(--accent-mint);
+  color: var(--accent-ink);
 }
 
 .transform-panel {

@@ -5,6 +5,7 @@ import "@fontsource/ibm-plex-mono/400.css";
 import "@fontsource/ibm-plex-mono/600.css";
 
 import App from "./app/App";
+import { ErrorBoundary } from "./app/ErrorBoundary";
 import "./styles/reset.css";
 import "./styles/tokens.css";
 import "./styles/shell.css";
@@ -17,6 +18,8 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );

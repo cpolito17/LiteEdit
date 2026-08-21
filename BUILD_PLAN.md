@@ -1,10 +1,12 @@
 # LiteEdit v1 Build Plan
 
-Status: planning baseline  
+Status: v1 release-candidate implementation; final evidence gates tracked below
 Target: `https://liteedit.charliepolito.com`  
 Repository: `cpolito17/LiteEdit`  
 Deployment: Cloudflare Workers Static Assets  
 Primary audience: an expert junior developer working through small reviewed pull requests
+
+Implementation note (2026-08-21): Phases 0-10 are present in the application and automated suite. The five-photo Object Selection benchmark, full cross-browser/accessibility matrix, and post-deploy production smoke remain evidence gates; they are not silently treated as passing.
 
 ## 1. Product goal
 

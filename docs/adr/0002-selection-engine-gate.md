@@ -1,10 +1,10 @@
 # ADR 0002: Do not select an Object Selection engine before the fixture gate
 
-Status: Open / decision blocked
+Status: Provisional implementation / acceptance blocked
 
 ## Decision
 
-Do not add OpenCV, a segmentation model, or a semantic-selection dependency to the production bundle during Phase 1. Keep the selection engine behind an interface until two local candidates are measured on five representative photos.
+Ship Quick Selection independently and keep Object Selection behind a worker/service interface. Use a lazy-loaded model-free foreground extractor provisionally; do not add OpenCV or a segmentation dependency to the initial bundle before representative fixtures justify its cost.
 
 ## Required comparison
 
@@ -15,8 +15,8 @@ The selected candidate must isolate the intended foreground subject in at least 
 
 ## Current evidence
 
-`spikes/selection-candidates.ts` compares two small model-free algorithms on a deterministic synthetic fixture. This proves the test harness shape only. It does not satisfy the real-photo acceptance gate.
+`spikes/selection-candidates.ts` compares two small model-free algorithms on a deterministic synthetic fixture. Production Object Selection removes border-connected pixels similar to a user-drawn region's corners and loads only when requested. Unit coverage proves mask correctness and lazy boundaries, not the real-photo acceptance gate.
 
 ## Consequence
 
-The dependent selection and editing phases remain blocked until the owner provides or approves the five-image fixture set and the benchmark records a passing candidate. A layer hit-test is not an acceptable substitute for semantic Object Selection.
+Marquee, lasso, Quick Selection, mask combination, and selection-aware editing may ship because they do not depend on semantic subject isolation. Object Selection must remain labeled provisional until the owner provides or approves five local photos and the benchmark records a passing candidate. A layer hit-test is not an acceptable substitute.

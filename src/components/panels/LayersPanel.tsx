@@ -26,6 +26,7 @@ type LayersPanelProps = {
   onMoveWithinParent: (layerId: LayerId, direction: "up" | "down") => void;
   onMove: (layerId: LayerId, parentId: LayerId | null, index: number) => void;
   onOutdent: (layerId: LayerId) => void;
+  onRasterize: (layerId: LayerId) => void;
 };
 
 function getSiblingIds(model: DocumentModel, layer: LayerNode): LayerId[] {
@@ -74,6 +75,7 @@ export function LayersPanel({
   onMoveWithinParent,
   onMove,
   onOutdent,
+  onRasterize,
 }: LayersPanelProps) {
   const [collapsedIds, setCollapsedIds] = useState<Set<LayerId>>(new Set());
   const [editingLayerId, setEditingLayerId] = useState<LayerId | null>(null);
@@ -184,6 +186,14 @@ export function LayersPanel({
           onClick={() => onOutdent(activeLayer.id)}
         >
           OUT
+        </UiButton>
+        <UiButton
+          className="layer-command"
+          aria-label="Rasterize active vector layer"
+          disabled={activeLayer.kind !== "vector" || activeLayer.parentId !== null}
+          onClick={() => onRasterize(activeLayer.id)}
+        >
+          RASTER
         </UiButton>
       </div>
 

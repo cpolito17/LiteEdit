@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   captureRasterSnapshot,
+  captureRasterRegion,
   cloneRasterSnapshot,
   hashRasterSnapshot,
   rasterSnapshotsEqual,
   restoreRasterSnapshot,
+  applyRasterSnapshot,
 } from "./raster-snapshot";
 
 function createFixture(): HTMLCanvasElement {
@@ -34,5 +36,15 @@ describe("raster snapshots", () => {
     clone.pixels[0] = 0;
     expect(snapshot.pixels[0]).toBe(255);
     expect(rasterSnapshotsEqual(snapshot, clone)).toBe(false);
+  });
+
+  it("captures and restores only one dirty region", () => {
+    const source = createFixture();
+    const patch = captureRasterRegion(source, { x: 1, y: 0, width: 1, height: 2 });
+    const context = source.getContext("2d");
+    context?.clearRect(1, 0, 1, 2);
+    const restored = captureRasterSnapshot(applyRasterSnapshot(source, patch), 3, 2);
+    expect(hashRasterSnapshot(restored)).toBe("3x2:c3c04c14");
+    expect(patch.x).toBe(1);
   });
 });

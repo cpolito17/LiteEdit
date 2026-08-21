@@ -9,15 +9,18 @@ import {
   getLayerById,
   insertGroupLayer,
   insertRasterLayer,
+  insertVectorLayer,
   MAX_DOCUMENT_DIMENSION,
   MAX_DOCUMENT_PIXELS,
   moveLayer,
   moveLayerWithinParent,
   outdentLayer,
   renameLayer,
+  rasterizeRootVectorLayer,
   setActiveLayer,
   setLayerOpacity,
   setLayerVisibility,
+  setVectorObject,
   ungroupLayer,
   wrapLayerInGroup,
 } from "./document-model";
@@ -173,5 +176,30 @@ describe("document model", () => {
     expect(() => deleteLayerSubtree(document, layer.id)).toThrow("keep at least one");
     expect(() => renameLayer(document, layer.id, "  ")).toThrow("cannot be empty");
     expect(setLayerVisibility(document, layer.id, false).layers[0]?.visible).toBe(false);
+  });
+
+  it("edits and rasterizes a root vector layer without changing its identity", () => {
+    const base = createBlankDocument({ width: 64, height: 64, background: "transparent" });
+    const inserted = insertVectorLayer(base, {
+      name: "Star",
+      object: { type: "shape", properties: { kind: "star", sides: 5, fill: "#ffffff" } },
+    });
+    const edited = setVectorObject(inserted.document, inserted.layer.id, {
+      type: "shape",
+      properties: { ...inserted.layer.object.properties, sides: 7 },
+    });
+    expect(getLayerById(edited, inserted.layer.id)).toMatchObject({
+      kind: "vector",
+      object: { properties: { sides: 7 } },
+    });
+    const rasterized = rasterizeRootVectorLayer(edited, inserted.layer.id, "rasterized-buffer");
+    expect(rasterized.layer).toMatchObject({
+      id: inserted.layer.id,
+      kind: "raster",
+      bufferId: "rasterized-buffer",
+      width: 64,
+      height: 64,
+    });
+    assertDocumentInvariant(rasterized.document);
   });
 });

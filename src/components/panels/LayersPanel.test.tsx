@@ -35,6 +35,7 @@ describe("LayersPanel", () => {
         onMoveWithinParent={vi.fn()}
         onMove={vi.fn()}
         onOutdent={vi.fn()}
+        onRasterize={vi.fn()}
       />,
     );
 

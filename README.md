@@ -4,9 +4,9 @@ LiteEdit is a desktop-first, browser-local photo editor. The Worker serves stati
 
 ## Current status
 
-Phase 0 through Phase 5 are implemented. The current application provides the accessible soft technical shell, local PNG/JPEG/WebP import, blank documents, Fabric-backed viewport navigation, isolated PNG export, nested raster layer groups, bounded undo/redo, pointer move and keyboard nudge, non-destructive scale/rotate/skew transforms with numeric fields, and a destructive 3 x 3 raster warp. Enter commits explicit transform sessions and Escape restores their exact pre-edit state. The layer model and raster sources remain local to the browser.
+LiteEdit v1 is implemented as a browser-local release candidate. It includes raster brush and eraser tools with dirty-tile history, composite color picking and persistent swatches, vector shapes and rasterization, marquee/lasso/quick/object selection, selection-aware editing, crop and document resize, PNG/JPEG export with JPEG target-size search, IndexedDB recovery, diagnostics, and memory/history instrumentation. The Phase 0-5 import, layer, affine-transform, warp, and bounded-history workflows remain available.
 
-Raster painting, vector shapes, selection-aware editing, crop, resize, recovery, and JPEG export still require later phases. Object Selection remains gated on five approved photos and a second local segmentation candidate.
+All image decoding, pixel editing, recovery, and export remain on the device. The only unresolved acceptance gate is the real-photo Object Selection benchmark: five approved local photos are still required to certify the provisional lazy-loaded foreground extractor at four-of-five successful isolations under two seconds. See [known limitations](docs/known-limitations.md).
 
 ## Development
 
@@ -31,4 +31,4 @@ Use Node `24.19.0` for local development. Do not commit `.env`, `.dev.vars`, cre
 
 The production target is `https://liteedit.charliepolito.com`. Cloudflare Workers Static Assets serves the built SPA. v1 has no API, database, object storage, account system, or server-side image processing.
 
-See [the build plan](BUILD_PLAN.md), [design system](docs/design-system.md), [architecture notes](docs/architecture.md), and [deployment runbook](docs/deployment.md).
+See [the build plan](BUILD_PLAN.md), [v1 release notes](docs/release-v1.md), [design system](docs/design-system.md), [architecture notes](docs/architecture.md), and [deployment runbook](docs/deployment.md).

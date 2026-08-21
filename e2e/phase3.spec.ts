@@ -24,7 +24,7 @@ test("opens and exports a local PNG without a network image request", async ({ p
   await expect(page.getByText("DOCUMENT / PIXEL")).toBeVisible();
   await expect(page.getByText("SIZE / 1 × 1 PX")).toBeVisible();
   await expect(page.getByRole("button", { name: "EXPORT" })).toBeEnabled();
-  await expect(page.getByText("BUILD / PHASE 5")).toBeVisible();
+  await expect(page.getByText("BUILD / V1 RELEASE")).toBeVisible();
   expect(networkImageRequests).toEqual([]);
 
   const downloadPromise = page.waitForEvent("download");

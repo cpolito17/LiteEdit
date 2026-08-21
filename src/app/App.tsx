@@ -1,36 +1,56 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { ComponentGallery } from "./ComponentGallery";
-import { DocumentViewport, getDocumentPointerLabel } from "./DocumentViewport";
+import {
+  DocumentViewport,
+  getDocumentPointerLabel,
+  type RasterEdit,
+  type ViewportController,
+} from "./DocumentViewport";
 import { Phase1SpikeGallery } from "./Phase1SpikeGallery";
 import { getShortcutAction } from "./shortcuts";
 import { panels, tools, type PanelId, type ToolId } from "./tool-model";
 import { HistoryPanel } from "../components/panels/HistoryPanel";
 import { LayersPanel } from "../components/panels/LayersPanel";
 import { TransformPanel } from "../components/panels/TransformPanel";
+import { SwatchesPanel } from "../components/panels/SwatchesPanel";
+import { ToolOptionsPanel } from "../components/panels/ToolOptionsPanel";
 import { Dialog, NumericField, Tabs, Toast, Tooltip, UiButton } from "../components/primitives/Ui";
 import {
   createBlankDocument,
+  cloneDocumentModel,
   deleteLayerSubtree,
   duplicateLayerSubtree,
   getLayerById,
   insertGroupLayer,
   insertRasterLayer,
+  insertVectorLayer,
   moveLayer,
   moveLayerWithinParent,
   outdentLayer,
   renameLayer,
+  rasterizeRootVectorLayer,
   setActiveLayer,
   setLayerLocked,
   setLayerOpacity,
   setLayerTransform,
   setLayerVisibility,
+  setVectorObject,
   ungroupLayer,
   wrapLayerInGroup,
   type DocumentBackground,
   type DocumentModel,
   type LayerId,
 } from "../editor/document-model";
+import { cropDocument, resizeDocument, type ResamplingMode } from "../editor/document-operations";
+import {
+  downloadBlob,
+  encodeExport,
+  normalizeExportFilename,
+  type ExportFormat,
+} from "../editor/export/export-service";
+import { loadSavedSwatches, normalizeHexColor, saveSwatches } from "../editor/color/color";
+import { DEFAULT_BRUSH_SETTINGS, type BrushSettings } from "../editor/raster/brush-engine";
 import {
   StructuralHistory,
   type CommitHistoryOptions,
@@ -49,19 +69,44 @@ import {
   type RasterSource,
 } from "../editor/raster/raster-sources";
 import {
+  applyRasterSnapshot,
+  captureRasterRegion,
   captureRasterSnapshot,
   restoreRasterSnapshot,
   type RasterSnapshot,
 } from "../editor/raster/raster-snapshot";
 import { createDefaultWarpNodes, warpRasterSource } from "../editor/raster/warp";
-import type { RendererInteractionMode, TransformGesture } from "../editor/renderer/fabric-adapter";
+import {
+  clearRecovery,
+  loadRecovery,
+  restoreRecovery,
+  saveRecovery,
+  type RecoveryRecord,
+} from "../editor/recovery/recovery-service";
+import {
+  renderDocumentCanvas,
+  type RendererInteractionMode,
+  type TransformGesture,
+} from "../editor/renderer/fabric-adapter";
 import {
   composeLayerTransform,
+  getLayerWorldTransform,
+  transformPoint,
   translateMatrix,
   type TransformFields,
   type TransformPoint,
 } from "../editor/transform";
 import type { Point } from "../editor/viewport";
+import {
+  combineSelectionMasks,
+  getSelectionBounds,
+  invertSelection,
+  type SelectionBounds,
+  type SelectionCombineMode,
+  type SelectionMask,
+} from "../editor/selection/selection-mask";
+import { SelectionService } from "../editor/selection/selection-service";
+import type { ShapeKind, ShapeStyle } from "../editor/vector/shape-geometry";
 
 const panelOptions = panels.map((panel) => ({ id: panel, label: panel }));
 
@@ -69,7 +114,7 @@ const panelCopy: Record<PanelId, string> = {
   LAYERS: "Create or open a document to manage its layer tree.",
   HISTORY: "Structural edits appear here as reversible transactions.",
   PROPERTIES: "Transform and viewport controls appear after a document is opened.",
-  SWATCHES: "Color tokens stay local until the raster editing surface lands.",
+  SWATCHES: "Foreground, background, recent, and saved colors stay on this device.",
 };
 
 type ToastTone = "info" | "success" | "warning";
@@ -83,6 +128,13 @@ type WarpSession = {
   layerId: LayerId;
   before: RasterSnapshot;
   nodes: TransformPoint[];
+};
+
+const DEFAULT_SHAPE_STYLE: ShapeStyle = {
+  fill: "#70FFD2",
+  stroke: "#101719",
+  strokeWidth: 2,
+  sides: 5,
 };
 
 function getTransformTargetId(model: DocumentModel, layerId: LayerId): LayerId {
@@ -104,6 +156,10 @@ function App() {
   const [transformSession, setTransformSession] = useState<TransformSession | null>(null);
   const [warpSession, setWarpSession] = useState<WarpSession | null>(null);
   const [newDialogOpen, setNewDialogOpen] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [resizeDialogOpen, setResizeDialogOpen] = useState(false);
+  const [recoveryRecord, setRecoveryRecord] = useState<RecoveryRecord | null>(null);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastTone, setToastTone] = useState<ToastTone>("info");
   const [documentModel, setDocumentModel] = useState<DocumentModel | null>(null);
@@ -115,10 +171,37 @@ function App() {
   const [newDocumentBackground, setNewDocumentBackground] =
     useState<DocumentBackground>("transparent");
   const [exportReady, setExportReady] = useState(false);
+  const [foregroundColor, setForegroundColor] = useState("#101719");
+  const [backgroundColor, setBackgroundColor] = useState("#FFFFFF");
+  const [recentColors, setRecentColors] = useState<string[]>(["#101719", "#FFFFFF"]);
+  const [savedSwatches, setSavedSwatches] = useState<string[]>(() => loadSavedSwatches());
+  const [brushSettings, setBrushSettings] = useState<BrushSettings>(DEFAULT_BRUSH_SETTINGS);
+  const [selection, setSelection] = useState<SelectionMask | null>(null);
+  const [selectionMode, setSelectionMode] = useState<SelectionCombineMode>("replace");
+  const [autoSelectionKind, setAutoSelectionKind] = useState<"quick" | "object">("quick");
+  const [selectionTolerance, setSelectionTolerance] = useState(48);
+  const [selectionBrushSize, setSelectionBrushSize] = useState(24);
+  const [selectionBusy, setSelectionBusy] = useState(false);
+  const [cropRectangle, setCropRectangle] = useState<SelectionBounds | null>(null);
+  const [shapeKind, setShapeKind] = useState<ShapeKind>("rectangle");
+  const [shapeStyle, setShapeStyle] = useState<ShapeStyle>(DEFAULT_SHAPE_STYLE);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("png");
+  const [exportQuality, setExportQuality] = useState(0.9);
+  const [exportTargetKilobytes, setExportTargetKilobytes] = useState(0);
+  const [exportMatte, setExportMatte] = useState("#FFFFFF");
+  const [exportSelectionOnly, setExportSelectionOnly] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [resizeWidth, setResizeWidth] = useState(1920);
+  const [resizeHeight, setResizeHeight] = useState(1080);
+  const [resizeLinked, setResizeLinked] = useState(true);
+  const [resampling, setResampling] = useState<ResamplingMode>("high");
   const [historyVersion, setHistoryVersion] = useState(0);
+  const [heapMegabytes, setHeapMegabytes] = useState<number | null>(null);
   const historyRef = useRef(new StructuralHistory());
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const exportHandlerRef = useRef<(() => void) | null>(null);
+  const viewportControllerRef = useRef<ViewportController | null>(null);
+  const selectionServiceRef = useRef(new SelectionService());
+  const exportGenerationRef = useRef(0);
   const toastTimerRef = useRef<number | null>(null);
   const historySnapshot = useMemo(() => historyRef.current.snapshot(), [historyVersion]);
 
@@ -139,6 +222,62 @@ function App() {
     },
     [],
   );
+
+  useEffect(() => {
+    let active = true;
+    void loadRecovery()
+      .then((record) => {
+        if (active && record) setRecoveryRecord(record);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setRecoveryError(error instanceof Error ? error.message : "Local recovery could not load.");
+      });
+    return () => {
+      active = false;
+      selectionServiceRef.current.cancel();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!documentModel || !documentSources) return;
+    const timer = window.setTimeout(() => {
+      void saveRecovery(documentModel, documentSources).catch((error) => {
+        setRecoveryError(
+          error instanceof Error ? error.message : "Local recovery could not be written.",
+        );
+      });
+    }, 750);
+    return () => window.clearTimeout(timer);
+  }, [documentModel, documentSources, historyVersion]);
+
+  useEffect(() => {
+    const updateHeap = () => {
+      const memory = (performance as Performance & { memory?: { usedJSHeapSize?: number } }).memory;
+      setHeapMegabytes(
+        typeof memory?.usedJSHeapSize === "number"
+          ? Math.round(memory.usedJSHeapSize / (1024 * 1024))
+          : null,
+      );
+    };
+    updateHeap();
+    const timer = window.setInterval(updateHeap, 2_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    selectionServiceRef.current.cancel();
+    setSelectionBusy(false);
+  }, [documentModel, documentSources]);
+
+  const updateForegroundColor = useCallback((color: string) => {
+    const normalized = normalizeHexColor(color);
+    setForegroundColor(normalized);
+    setBrushSettings((current) => ({ ...current, color: normalized }));
+    setRecentColors((current) =>
+      [normalized, ...current.filter((value) => value !== normalized)].slice(0, 12),
+    );
+  }, []);
 
   const refreshHistory = useCallback(() => {
     setHistoryVersion((version) => version + 1);
@@ -181,12 +320,20 @@ function App() {
         if (!current) return current;
         const next = { ...current };
         for (const change of restored.rasterChanges) {
-          next[change.bufferId] = restoreRasterSnapshot(change.snapshot);
+          const source = next[change.bufferId];
+          if (source) next[change.bufferId] = applyRasterSnapshot(source, change.snapshot);
         }
         return next;
       });
     }
   }, []);
+
+  const cancelExport = useCallback(() => {
+    exportGenerationRef.current += 1;
+    setExportBusy(false);
+    setExportDialogOpen(false);
+    announce("EXPORT / CANCELLED");
+  }, [announce]);
 
   const cancelActiveEdit = useCallback(() => {
     if (transformSession) {
@@ -200,13 +347,42 @@ function App() {
       announce("WARP / CANCELLED");
       return true;
     }
+    if (cropRectangle) {
+      setCropRectangle(null);
+      announce("CROP / CANCELLED");
+      return true;
+    }
+    if (selectionBusy) {
+      selectionServiceRef.current.cancel();
+      setSelectionBusy(false);
+      announce("SELECTION / CANCELLED");
+      return true;
+    }
+    if (exportDialogOpen) {
+      cancelExport();
+      return true;
+    }
+    if (resizeDialogOpen) {
+      setResizeDialogOpen(false);
+      return true;
+    }
     if (newDialogOpen) {
       setNewDialogOpen(false);
       announce("ACTION / CANCELLED");
       return true;
     }
     return false;
-  }, [announce, newDialogOpen, transformSession, warpSession]);
+  }, [
+    announce,
+    cancelExport,
+    cropRectangle,
+    exportDialogOpen,
+    newDialogOpen,
+    resizeDialogOpen,
+    selectionBusy,
+    transformSession,
+    warpSession,
+  ]);
 
   const handleUndo = useCallback(() => {
     if (transformSession || warpSession) {
@@ -265,19 +441,108 @@ function App() {
       announce("TRANSFORM / ALREADY ACTIVE");
       return;
     }
-    const layerId = getTransformTargetId(documentModel, documentModel.activeLayerId);
-    const layer = getLayerById(documentModel, layerId);
+    let workingDocument = documentModel;
+    let layerId = getTransformTargetId(documentModel, documentModel.activeLayerId);
+    let layer = getLayerById(documentModel, layerId);
+    if (selection && documentSources) {
+      const selectedLayer = getLayerById(documentModel, documentModel.activeLayerId);
+      if (selectedLayer.kind === "raster" && !selectedLayer.locked && selectedLayer.visible) {
+        const source = documentSources[selectedLayer.bufferId];
+        if (source) {
+          const original = cloneRasterSource(source, selectedLayer.width, selectedLayer.height);
+          const beforeSource = cloneRasterSource(source, selectedLayer.width, selectedLayer.height);
+          const lifted = createTransparentRasterSource(documentModel.width, documentModel.height);
+          const originalContext = original.getContext("2d", { willReadFrequently: true });
+          const liftedContext = lifted.getContext("2d");
+          if (originalContext && liftedContext) {
+            const originalImage = originalContext.getImageData(
+              0,
+              0,
+              original.width,
+              original.height,
+            );
+            const liftedImage = liftedContext.createImageData(lifted.width, lifted.height);
+            const world = getLayerWorldTransform(documentModel, selectedLayer.id);
+            let left = original.width;
+            let top = original.height;
+            let right = -1;
+            let bottom = -1;
+            for (let y = 0; y < original.height; y += 1) {
+              for (let x = 0; x < original.width; x += 1) {
+                const point = transformPoint({ x: x + 0.5, y: y + 0.5 }, world);
+                const documentX = Math.floor(point.x);
+                const documentY = Math.floor(point.y);
+                if (
+                  documentX < 0 ||
+                  documentY < 0 ||
+                  documentX >= selection.width ||
+                  documentY >= selection.height ||
+                  (selection.data[documentY * selection.width + documentX] ?? 0) === 0
+                )
+                  continue;
+                const sourceOffset = (y * original.width + x) * 4;
+                const destinationOffset = (documentY * lifted.width + documentX) * 4;
+                liftedImage.data.set(
+                  originalImage.data.subarray(sourceOffset, sourceOffset + 4),
+                  destinationOffset,
+                );
+                originalImage.data.fill(0, sourceOffset, sourceOffset + 4);
+                left = Math.min(left, x);
+                top = Math.min(top, y);
+                right = Math.max(right, x);
+                bottom = Math.max(bottom, y);
+              }
+            }
+            if (right >= left) {
+              originalContext.putImageData(originalImage, 0, 0);
+              liftedContext.putImageData(liftedImage, 0, 0);
+              const result = insertRasterLayer(documentModel, {
+                name: "Floating Selection",
+                parentId: null,
+                index: documentModel.rootLayerIds.length,
+              });
+              const region = {
+                x: left,
+                y: top,
+                width: right - left + 1,
+                height: bottom - top + 1,
+              };
+              historyRef.current.commit("Lift selection", documentModel, result.document, {
+                rasterChanges: [
+                  {
+                    bufferId: selectedLayer.bufferId,
+                    before: captureRasterRegion(beforeSource, region),
+                    after: captureRasterRegion(original, region),
+                  },
+                ],
+              });
+              setDocumentSources({
+                ...documentSources,
+                [selectedLayer.bufferId]: original,
+                [result.layer.bufferId]: lifted,
+              });
+              workingDocument = result.document;
+              layerId = result.layer.id;
+              layer = result.layer;
+              setSelection(null);
+              refreshHistory();
+              announce("SELECTION / LIFTED TO RASTER LAYER", "success");
+            }
+          }
+        }
+      }
+    }
     if (layer.locked) {
       announce("TRANSFORM / LAYER IS LOCKED", "warning");
       return;
     }
     setWarpSession(null);
-    setTransformSession({ layerId, before: documentModel });
-    setDocumentModel(setActiveLayer(documentModel, layerId));
+    setTransformSession({ layerId, before: workingDocument });
+    setDocumentModel(setActiveLayer(workingDocument, layerId));
     setActivePanel("PROPERTIES");
     setActiveTool("move");
     announce(`TRANSFORM / ${layer.name.toUpperCase()}`);
-  }, [announce, documentModel, transformSession]);
+  }, [announce, documentModel, documentSources, refreshHistory, selection, transformSession]);
 
   const beginWarp = useCallback(() => {
     if (!documentModel || !documentSources) return;
@@ -435,6 +700,101 @@ function App() {
     [announce, commitDocument, documentModel, transformSession, warpSession],
   );
 
+  const handleClearSelectedPixels = useCallback(() => {
+    if (!documentModel || !documentSources || !selection) {
+      announce("CLEAR / NO ACTIVE SELECTION");
+      return;
+    }
+    const layer = getLayerById(documentModel, documentModel.activeLayerId);
+    if (layer.kind !== "raster" || layer.locked || !layer.visible) {
+      announce("CLEAR / SELECT A VISIBLE UNLOCKED RASTER LAYER", "warning");
+      return;
+    }
+    const source = documentSources[layer.bufferId];
+    if (!source) return;
+    const canvas = cloneRasterSource(source, layer.width, layer.height);
+    const beforeSource = cloneRasterSource(source, layer.width, layer.height);
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) return;
+    const image = context.getImageData(0, 0, canvas.width, canvas.height);
+    const world = getLayerWorldTransform(documentModel, layer.id);
+    let left = canvas.width;
+    let top = canvas.height;
+    let right = -1;
+    let bottom = -1;
+    for (let y = 0; y < canvas.height; y += 1) {
+      for (let x = 0; x < canvas.width; x += 1) {
+        const point = transformPoint({ x: x + 0.5, y: y + 0.5 }, world);
+        const documentX = Math.floor(point.x);
+        const documentY = Math.floor(point.y);
+        if (
+          documentX < 0 ||
+          documentY < 0 ||
+          documentX >= selection.width ||
+          documentY >= selection.height ||
+          (selection.data[documentY * selection.width + documentX] ?? 0) === 0
+        )
+          continue;
+        const offset = (y * canvas.width + x) * 4;
+        image.data[offset] = 0;
+        image.data[offset + 1] = 0;
+        image.data[offset + 2] = 0;
+        image.data[offset + 3] = 0;
+        left = Math.min(left, x);
+        top = Math.min(top, y);
+        right = Math.max(right, x);
+        bottom = Math.max(bottom, y);
+      }
+    }
+    if (right < left) {
+      announce("CLEAR / SELECTION DOES NOT CROSS ACTIVE LAYER");
+      return;
+    }
+    context.putImageData(image, 0, 0);
+    const region = { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
+    const before = captureRasterRegion(beforeSource, region);
+    const after = captureRasterRegion(canvas, region);
+    recordDocumentCommit("Clear selection", documentModel, documentModel, {
+      rasterChanges: [{ bufferId: layer.bufferId, before, after }],
+    });
+    setDocumentSources({ ...documentSources, [layer.bufferId]: canvas });
+  }, [announce, documentModel, documentSources, recordDocumentCommit, selection]);
+
+  const activateTool = useCallback(
+    (tool: ToolId) => {
+      cancelActiveEdit();
+      if (
+        documentModel &&
+        documentSources &&
+        (tool === "brush" || tool === "eraser") &&
+        getLayerById(documentModel, documentModel.activeLayerId).kind !== "raster"
+      ) {
+        const result = insertRasterLayer(documentModel, { name: "Paint Layer" });
+        const source = createTransparentRasterSource(documentModel.width, documentModel.height);
+        setDocumentSources({ ...documentSources, [result.layer.bufferId]: source });
+        commitDocument("Add: Paint Layer", result.document);
+        announce("PAINT / NEW RASTER LAYER CREATED");
+      }
+      setActiveTool(tool);
+      if (tool === "crop" && selection) {
+        setCropRectangle(getSelectionBounds(selection));
+      }
+      if (
+        tool === "shape" ||
+        tool === "brush" ||
+        tool === "eraser" ||
+        tool === "crop" ||
+        tool === "select" ||
+        tool === "marquee" ||
+        tool === "lasso"
+      ) {
+        setActivePanel("PROPERTIES");
+      }
+      announce(`ACTIVE TOOL / ${tool.toUpperCase()}`);
+    },
+    [announce, cancelActiveEdit, commitDocument, documentModel, documentSources, selection],
+  );
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       const action = getShortcutAction(event);
@@ -457,9 +817,7 @@ function App() {
       event.preventDefault();
       switch (action.type) {
         case "tool":
-          cancelActiveEdit();
-          setActiveTool(action.tool);
-          announce(`ACTIVE TOOL / ${action.tool.toUpperCase()}`);
+          activateTool(action.tool);
           break;
         case "undo":
           handleUndo();
@@ -468,6 +826,7 @@ function App() {
           handleRedo();
           break;
         case "clear-selection":
+          setSelection(null);
           announce("SELECTION / CLEARED");
           break;
         case "transform":
@@ -479,6 +838,9 @@ function App() {
         case "nudge":
           handleNudge(action.x, action.y);
           break;
+        case "clear-pixels":
+          handleClearSelectedPixels();
+          break;
         case "cancel":
           cancelActiveEdit();
           break;
@@ -489,10 +851,12 @@ function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     announce,
+    activateTool,
     beginTransform,
     cancelActiveEdit,
     commitActiveEdit,
     handleNudge,
+    handleClearSelectedPixels,
     handleRedo,
     handleUndo,
     newDialogOpen,
@@ -507,10 +871,13 @@ function App() {
       setDocumentSources(createRasterSourceMap(model, source));
       setPointerPosition(null);
       setImportError(null);
-      setExportReady(false);
       setZoom(100);
       setTransformSession(null);
       setWarpSession(null);
+      setSelection(null);
+      setCropRectangle(null);
+      setResizeWidth(model.width);
+      setResizeHeight(model.height);
       refreshHistory();
       announce(message, "success");
     },
@@ -624,6 +991,310 @@ function App() {
     }
   };
 
+  const handleRasterEdit = useCallback(
+    (edit: RasterEdit) => {
+      if (!documentModel) return;
+      const committed = recordDocumentCommit(edit.label, documentModel, documentModel, {
+        rasterChanges: edit.changes.map((change) => ({
+          bufferId: edit.bufferId,
+          before: change.before,
+          after: change.after,
+        })),
+      });
+      if (committed) {
+        setDocumentSources((current) =>
+          current ? { ...current, [edit.bufferId]: edit.source } : current,
+        );
+      }
+    },
+    [documentModel, recordDocumentCommit],
+  );
+
+  const handleSelectionCommit = useCallback(
+    (incoming: SelectionMask, mode: SelectionCombineMode) => {
+      const next = combineSelectionMasks(selection, incoming, mode);
+      const bounds = getSelectionBounds(next);
+      setSelection(bounds ? next : null);
+      announce(
+        bounds
+          ? `SELECTION / ${bounds.width} × ${bounds.height} / ${mode.toUpperCase()}`
+          : "SELECTION / EMPTY",
+      );
+    },
+    [announce, selection],
+  );
+
+  const handleAutoSelect = useCallback(
+    async (request: { seed?: { x: number; y: number }; region?: SelectionBounds }) => {
+      const controller = viewportControllerRef.current;
+      if (!controller || !documentModel) return;
+      if (autoSelectionKind === "object" && !request.region) {
+        announce("OBJECT SELECT / DRAG A REGION", "warning");
+        return;
+      }
+      setSelectionBusy(true);
+      announce(`${autoSelectionKind.toUpperCase()} SELECT / WORKING`);
+      try {
+        const mask = await selectionServiceRef.current.run({
+          image: controller.renderPixels(),
+          mode: autoSelectionKind,
+          seed: request.seed,
+          region: request.region,
+          tolerance: selectionTolerance,
+          brushSize: selectionBrushSize,
+        });
+        if (mask) handleSelectionCommit(mask, selectionMode);
+      } catch (error) {
+        announce(
+          error instanceof Error ? error.message : "The selection could not be created.",
+          "warning",
+        );
+      } finally {
+        setSelectionBusy(false);
+      }
+    },
+    [
+      announce,
+      autoSelectionKind,
+      documentModel,
+      handleSelectionCommit,
+      selectionMode,
+      selectionBrushSize,
+      selectionTolerance,
+    ],
+  );
+
+  const handleShapeCreate = useCallback(
+    (object: Parameters<typeof insertVectorLayer>[1]["object"]) => {
+      if (!documentModel) return;
+      try {
+        const result = insertVectorLayer(documentModel, {
+          name: `${String(object.properties.kind ?? "Shape")} Shape`,
+          object,
+        });
+        commitDocument(`Add: ${result.layer.name}`, result.document);
+      } catch (error) {
+        announce(
+          error instanceof Error ? error.message : "The shape could not be created.",
+          "warning",
+        );
+      }
+    },
+    [announce, commitDocument, documentModel],
+  );
+
+  const handleShapeKindChange = useCallback(
+    (kind: ShapeKind) => {
+      setShapeKind(kind);
+      if (!documentModel) return;
+      const layer = getLayerById(documentModel, documentModel.activeLayerId);
+      if (layer.kind !== "vector" || layer.locked) return;
+      const next = setVectorObject(documentModel, layer.id, {
+        ...layer.object,
+        properties: { ...layer.object.properties, kind },
+      });
+      commitDocument(`Edit: ${layer.name}`, next, {
+        coalesceKey: `vector-geometry:${layer.id}`,
+        coalesceWindowMs: 500,
+      });
+    },
+    [commitDocument, documentModel],
+  );
+
+  const handleShapeStyleChange = useCallback(
+    (style: ShapeStyle) => {
+      setShapeStyle(style);
+      if (!documentModel) return;
+      const layer = getLayerById(documentModel, documentModel.activeLayerId);
+      if (layer.kind !== "vector" || layer.locked) return;
+      const next = setVectorObject(documentModel, layer.id, {
+        ...layer.object,
+        properties: {
+          ...layer.object.properties,
+          fill: style.fill,
+          stroke: style.stroke,
+          strokeWidth: style.strokeWidth,
+          sides: style.sides,
+        },
+      });
+      commitDocument(`Edit: ${layer.name}`, next, {
+        coalesceKey: `vector-style:${layer.id}`,
+        coalesceWindowMs: 500,
+      });
+    },
+    [commitDocument, documentModel],
+  );
+
+  const handleRasterizeVector = useCallback(
+    (layerId: LayerId) => {
+      if (!documentModel || !documentSources) return;
+      try {
+        const isolated = cloneDocumentModel(documentModel);
+        isolated.layers = isolated.layers.map((layer) => ({
+          ...layer,
+          visible: layer.id === layerId,
+        }));
+        const source = renderDocumentCanvas(isolated, documentSources);
+        const result = rasterizeRootVectorLayer(documentModel, layerId);
+        setDocumentSources({
+          ...documentSources,
+          [result.layer.bufferId]: source,
+        });
+        commitDocument(`Rasterize: ${result.layer.name}`, result.document);
+      } catch (error) {
+        announce(
+          error instanceof Error ? error.message : "The vector layer could not be rasterized.",
+          "warning",
+        );
+      }
+    },
+    [announce, commitDocument, documentModel, documentSources],
+  );
+
+  const handleCommitCrop = useCallback(() => {
+    if (!documentModel || !cropRectangle) return;
+    try {
+      const next = cropDocument(documentModel, cropRectangle);
+      commitDocument(`Crop: ${next.width} × ${next.height}`, next);
+      setCropRectangle(null);
+      setSelection(null);
+      setResizeWidth(next.width);
+      setResizeHeight(next.height);
+    } catch (error) {
+      announce(
+        error instanceof Error ? error.message : "The crop could not be committed.",
+        "warning",
+      );
+    }
+  }, [announce, commitDocument, cropRectangle, documentModel]);
+
+  const handleCommitResize = useCallback(() => {
+    if (!documentModel) return;
+    try {
+      const next = resizeDocument(documentModel, resizeWidth, resizeHeight, resampling);
+      commitDocument(`Resize: ${next.width} × ${next.height}`, next);
+      setSelection(null);
+      setResizeDialogOpen(false);
+    } catch (error) {
+      announce(
+        error instanceof Error ? error.message : "The resize could not be committed.",
+        "warning",
+      );
+    }
+  }, [announce, commitDocument, documentModel, resampling, resizeHeight, resizeWidth]);
+
+  const handleExport = useCallback(async () => {
+    const controller = viewportControllerRef.current;
+    if (!controller || !documentModel) return;
+    const generation = ++exportGenerationRef.current;
+    setExportBusy(true);
+    try {
+      let exportCanvas = controller.renderCanvas();
+      const selectedBounds = exportSelectionOnly ? getSelectionBounds(selection) : null;
+      if (selectedBounds) {
+        const croppedCanvas = document.createElement("canvas");
+        croppedCanvas.width = selectedBounds.width;
+        croppedCanvas.height = selectedBounds.height;
+        croppedCanvas
+          .getContext("2d")
+          ?.drawImage(
+            exportCanvas,
+            selectedBounds.x,
+            selectedBounds.y,
+            selectedBounds.width,
+            selectedBounds.height,
+            0,
+            0,
+            selectedBounds.width,
+            selectedBounds.height,
+          );
+        exportCanvas = croppedCanvas;
+      }
+      const result = await encodeExport(exportCanvas, {
+        format: exportFormat,
+        quality: exportQuality,
+        matte: exportMatte,
+        targetBytes:
+          exportFormat === "jpeg" && exportTargetKilobytes > 0
+            ? Math.round(exportTargetKilobytes * 1024)
+            : undefined,
+      });
+      if (generation !== exportGenerationRef.current) return;
+      downloadBlob(result.blob, normalizeExportFilename(documentModel.name, exportFormat));
+      setExportDialogOpen(false);
+      announce(
+        `EXPORT / ${exportFormat.toUpperCase()} / ${Math.round(result.blob.size / 1024)} KB${result.targetMet ? "" : " / TARGET NOT MET"}`,
+        result.targetMet ? "success" : "warning",
+      );
+    } catch (error) {
+      if (generation !== exportGenerationRef.current) return;
+      announce(
+        error instanceof Error ? error.message : "The export could not be encoded.",
+        "warning",
+      );
+    } finally {
+      if (generation === exportGenerationRef.current) setExportBusy(false);
+    }
+  }, [
+    announce,
+    documentModel,
+    exportFormat,
+    exportMatte,
+    exportQuality,
+    exportSelectionOnly,
+    exportTargetKilobytes,
+    selection,
+  ]);
+
+  const handleRestoreRecovery = useCallback(async () => {
+    if (!recoveryRecord) return;
+    try {
+      const restored = await restoreRecovery(recoveryRecord);
+      historyRef.current.clear();
+      setDocumentModel(restored.document);
+      setDocumentSources(restored.sources);
+      setRecoveryRecord(null);
+      setSelection(null);
+      setCropRectangle(null);
+      refreshHistory();
+      announce("RECOVERY / RESTORED", "success");
+    } catch (error) {
+      setRecoveryError(error instanceof Error ? error.message : "The recovery record is corrupt.");
+      setRecoveryRecord(null);
+      void clearRecovery();
+      announce("RECOVERY / CORRUPT RECORD DISCARDED", "warning");
+    }
+  }, [announce, recoveryRecord, refreshHistory]);
+
+  const handleDiscardRecovery = useCallback(() => {
+    setRecoveryRecord(null);
+    void clearRecovery();
+    announce("RECOVERY / DISCARDED");
+  }, [announce]);
+
+  const handleDiagnosticExport = useCallback(() => {
+    const diagnostic = {
+      version: "1.0.0",
+      generatedAt: new Date().toISOString(),
+      document: documentModel
+        ? {
+            id: documentModel.id,
+            dimensions: [documentModel.width, documentModel.height],
+            layerCount: documentModel.layers.length,
+            schemaVersion: documentModel.schemaVersion,
+          }
+        : null,
+      history: historyRef.current.snapshot(),
+      recoveryError,
+      userAgent: navigator.userAgent,
+    };
+    downloadBlob(
+      new Blob([JSON.stringify(diagnostic, null, 2)], { type: "application/json" }),
+      "liteedit-diagnostic.json",
+    );
+    announce("DIAGNOSTIC / EXPORTED");
+  }, [announce, documentModel, recoveryError]);
+
   const runLayerCommand = (
     label: string,
     operation: (model: DocumentModel) => DocumentModel,
@@ -653,15 +1324,28 @@ function App() {
         setWarpSession(null);
         announce("EDIT / CANCELLED ON LAYER CHANGE");
       }
+      if (documentModel) {
+        const layer = getLayerById(documentModel, layerId);
+        if (layer.kind === "vector") {
+          const properties = layer.object.properties;
+          setShapeKind((properties.kind as ShapeKind | undefined) ?? "rectangle");
+          setShapeStyle({
+            fill: typeof properties.fill === "string" ? properties.fill : null,
+            stroke: typeof properties.stroke === "string" ? properties.stroke : null,
+            strokeWidth: typeof properties.strokeWidth === "number" ? properties.strokeWidth : 0,
+            sides: typeof properties.sides === "number" ? properties.sides : 5,
+          });
+        }
+      }
     },
-    [announce, transformSession, warpSession],
+    [announce, documentModel, transformSession, warpSession],
   );
 
   const handleViewportStatus = useCallback((message: string) => announce(message), [announce]);
 
-  const handleExportReady = useCallback((handler: (() => void) | null) => {
-    exportHandlerRef.current = handler;
-    setExportReady(handler !== null);
+  const handleControllerReady = useCallback((controller: ViewportController | null) => {
+    viewportControllerRef.current = controller;
+    setExportReady(controller !== null);
   }, []);
 
   const handlePointerPosition = useCallback((point: Point | null) => {
@@ -681,7 +1365,9 @@ function App() {
         ? historySnapshot.applied.length
         : activePanel === "PROPERTIES" && documentModel
           ? 1
-          : 0;
+          : activePanel === "SWATCHES"
+            ? savedSwatches.length
+            : 0;
   const interactionMode: RendererInteractionMode = warpSession
     ? "none"
     : transformSession
@@ -689,6 +1375,7 @@ function App() {
       : activeTool === "move"
         ? "move"
         : "none";
+  const selectionBounds = getSelectionBounds(selection);
 
   if (import.meta.env.DEV && window.location.pathname === "/__gallery") {
     return <ComponentGallery />;
@@ -706,7 +1393,7 @@ function App() {
             LE
           </span>
           <span className="brand-name">LiteEdit</span>
-          <span className="brand-version">V0.5 / MOVE + TRANSFORM</span>
+          <span className="brand-version">V1.0 / LOCAL EDITOR</span>
         </div>
 
         <div className="command-actions" role="group" aria-label="Document commands">
@@ -716,9 +1403,21 @@ function App() {
           <UiButton
             className="command-button"
             disabled={!documentModel || !exportReady}
-            onClick={() => exportHandlerRef.current?.()}
+            onClick={() => setExportDialogOpen(true)}
           >
             EXPORT
+          </UiButton>
+          <UiButton
+            className="command-button"
+            disabled={!documentModel}
+            onClick={() => {
+              if (!documentModel) return;
+              setResizeWidth(documentModel.width);
+              setResizeHeight(documentModel.height);
+              setResizeDialogOpen(true);
+            }}
+          >
+            RESIZE
           </UiButton>
           <UiButton
             className="command-button"
@@ -743,6 +1442,13 @@ function App() {
             }}
           >
             NEW
+          </UiButton>
+          <UiButton
+            className="command-button"
+            aria-label="Export local diagnostic report"
+            onClick={handleDiagnosticExport}
+          >
+            DIAG
           </UiButton>
           <span className="system-status" role="status">
             <span className="status-led" aria-hidden="true" />
@@ -770,11 +1476,7 @@ function App() {
                   type="button"
                   aria-label={`${tool.label} tool, shortcut ${tool.shortcut}`}
                   aria-pressed={activeTool === tool.id}
-                  onClick={() => {
-                    cancelActiveEdit();
-                    setActiveTool(tool.id);
-                    announce(`ACTIVE TOOL / ${tool.label}`);
-                  }}
+                  onClick={() => activateTool(tool.id)}
                 >
                   <span className="tool-glyph" aria-hidden="true">
                     {tool.glyph}
@@ -786,8 +1488,20 @@ function App() {
             ))}
           </div>
           <div className="rail-footer" role="group" aria-label="Foreground and background colors">
-            <span className="color-chip color-chip-foreground" title="Foreground color" />
-            <span className="color-chip color-chip-background" title="Background color" />
+            <button
+              className="color-chip color-chip-foreground"
+              style={{ background: foregroundColor }}
+              title={`Foreground color ${foregroundColor}`}
+              aria-label={`Foreground color ${foregroundColor}`}
+              onClick={() => setActivePanel("SWATCHES")}
+            />
+            <button
+              className="color-chip color-chip-background"
+              style={{ background: backgroundColor }}
+              title={`Background color ${backgroundColor}`}
+              aria-label={`Background color ${backgroundColor}`}
+              onClick={() => setActivePanel("SWATCHES")}
+            />
           </div>
         </aside>
 
@@ -818,6 +1532,13 @@ function App() {
                 warpSession ? { layerId: warpSession.layerId, nodes: warpSession.nodes } : null
               }
               zoomPercent={zoom}
+              brushSettings={{ ...brushSettings, color: foregroundColor }}
+              selection={selection}
+              selectionMode={selectionMode}
+              autoSelectionKind={autoSelectionKind}
+              cropRectangle={cropRectangle}
+              shapeKind={shapeKind}
+              shapeStyle={shapeStyle}
               onZoomChange={setZoom}
               onPointerPosition={handlePointerPosition}
               onActiveLayerChange={handleActiveLayerChange}
@@ -826,7 +1547,16 @@ function App() {
                 setWarpSession((current) => (current ? { ...current, nodes } : current))
               }
               onStatus={handleViewportStatus}
-              onExportReady={handleExportReady}
+              onRasterEdit={handleRasterEdit}
+              onSelectionCommit={handleSelectionCommit}
+              onAutoSelect={(request) => void handleAutoSelect(request)}
+              onShapeCreate={handleShapeCreate}
+              onCropChange={setCropRectangle}
+              onPickColor={(color) => {
+                updateForegroundColor(color);
+                announce(`PICKER / ${color}`, "success");
+              }}
+              onControllerReady={handleControllerReady}
             />
           ) : (
             <div className="empty-state" data-testid="empty-state">
@@ -879,18 +1609,65 @@ function App() {
               <span className="panel-count">{String(panelCount).padStart(2, "0")}</span>
             </div>
             {activePanel === "PROPERTIES" && documentModel ? (
-              <TransformPanel
-                model={documentModel}
-                zoom={zoom}
-                transformActive={transformSession !== null}
-                warpActive={warpSession !== null}
-                onZoomChange={setZoom}
-                onBeginTransform={beginTransform}
-                onTransformChange={handleTransformChange}
-                onBeginWarp={beginWarp}
-                onCommit={commitActiveEdit}
-                onCancel={cancelActiveEdit}
-              />
+              activeTool === "move" || activeTool === "hand" || activeTool === "picker" ? (
+                <TransformPanel
+                  model={documentModel}
+                  zoom={zoom}
+                  transformActive={transformSession !== null}
+                  warpActive={warpSession !== null}
+                  onZoomChange={setZoom}
+                  onBeginTransform={beginTransform}
+                  onTransformChange={handleTransformChange}
+                  onBeginWarp={beginWarp}
+                  onCommit={commitActiveEdit}
+                  onCancel={cancelActiveEdit}
+                />
+              ) : (
+                <ToolOptionsPanel
+                  activeTool={activeTool}
+                  brush={brushSettings}
+                  onBrushChange={setBrushSettings}
+                  selectionMode={selectionMode}
+                  onSelectionModeChange={setSelectionMode}
+                  autoSelectionKind={autoSelectionKind}
+                  onAutoSelectionKindChange={setAutoSelectionKind}
+                  tolerance={selectionTolerance}
+                  onToleranceChange={setSelectionTolerance}
+                  selectionBrushSize={selectionBrushSize}
+                  onSelectionBrushSizeChange={setSelectionBrushSize}
+                  onInvertSelection={() => {
+                    if (!selection) return;
+                    setSelection(invertSelection(selection));
+                    announce("SELECTION / INVERTED");
+                  }}
+                  onClearSelection={() => {
+                    setSelection(null);
+                    announce("SELECTION / CLEARED");
+                  }}
+                  shapeKind={shapeKind}
+                  onShapeKindChange={handleShapeKindChange}
+                  shapeStyle={shapeStyle}
+                  onShapeStyleChange={handleShapeStyleChange}
+                  cropRectangle={cropRectangle}
+                  onCropPreset={(ratio) => {
+                    if (!documentModel || ratio === null) {
+                      setCropRectangle(null);
+                      return;
+                    }
+                    const width = Math.min(documentModel.width, documentModel.height * ratio);
+                    const height = width / ratio;
+                    setCropRectangle({
+                      x: (documentModel.width - width) / 2,
+                      y: (documentModel.height - height) / 2,
+                      width,
+                      height,
+                    });
+                  }}
+                  onCommitCrop={handleCommitCrop}
+                  onCropRectangleChange={setCropRectangle}
+                  onCancelCrop={() => setCropRectangle(null)}
+                />
+              )
             ) : activePanel === "LAYERS" && documentModel ? (
               <LayersPanel
                 model={documentModel}
@@ -954,9 +1731,41 @@ function App() {
                     (model) => outdentLayer(model, layerId),
                   )
                 }
+                onRasterize={handleRasterizeVector}
               />
             ) : activePanel === "HISTORY" && documentModel ? (
               <HistoryPanel snapshot={historySnapshot} onUndo={handleUndo} onRedo={handleRedo} />
+            ) : activePanel === "SWATCHES" ? (
+              <SwatchesPanel
+                foreground={foregroundColor}
+                background={backgroundColor}
+                recent={recentColors}
+                saved={savedSwatches}
+                onForegroundChange={updateForegroundColor}
+                onBackgroundChange={(color) => setBackgroundColor(normalizeHexColor(color))}
+                onSwap={() => {
+                  const foreground = foregroundColor;
+                  updateForegroundColor(backgroundColor);
+                  setBackgroundColor(foreground);
+                }}
+                onReset={() => {
+                  updateForegroundColor("#101719");
+                  setBackgroundColor("#FFFFFF");
+                }}
+                onSave={() => {
+                  const next = [
+                    foregroundColor,
+                    ...savedSwatches.filter((color) => color !== foregroundColor),
+                  ].slice(0, 24);
+                  setSavedSwatches(next);
+                  saveSwatches(next);
+                }}
+                onRemove={(color) => {
+                  const next = savedSwatches.filter((value) => value !== color);
+                  setSavedSwatches(next);
+                  saveSwatches(next);
+                }}
+              />
             ) : (
               <div className="panel-empty">
                 <span className="panel-empty-code">// WAITING FOR DOCUMENT</span>
@@ -979,7 +1788,16 @@ function App() {
           {warpSession ? "WARP" : transformSession ? "TRANSFORM" : activeTool.toUpperCase()}
         </span>
         <span>HISTORY / {historySnapshot.applied.length}</span>
-        <span className="status-bar-right">BUILD / PHASE 5</span>
+        <span>MEMORY / {heapMegabytes === null ? "N/A" : `${heapMegabytes} MIB`}</span>
+        <span>
+          SELECT /{" "}
+          {selectionBusy
+            ? "WORKING"
+            : selectionBounds
+              ? `${selectionBounds.width} × ${selectionBounds.height} / ${selectionMode.toUpperCase()}`
+              : "NONE"}
+        </span>
+        <span className="status-bar-right">BUILD / V1 RELEASE</span>
       </footer>
 
       {toastMessage ? <Toast message={toastMessage} tone={toastTone} /> : null}
@@ -1034,6 +1852,169 @@ function App() {
           <span>MODE</span>
           <strong>LOCAL / LOSSLESS</strong>
         </div>
+      </Dialog>
+
+      <Dialog
+        open={exportDialogOpen}
+        title="EXPORT AS"
+        onClose={() => {
+          if (exportBusy) cancelExport();
+          else setExportDialogOpen(false);
+        }}
+        footer={
+          <>
+            <UiButton onClick={exportBusy ? cancelExport : () => setExportDialogOpen(false)}>
+              CANCEL
+            </UiButton>
+            <UiButton tone="accent" disabled={exportBusy} onClick={() => void handleExport()}>
+              {exportBusy ? "ENCODING…" : "EXPORT FILE"}
+            </UiButton>
+          </>
+        }
+      >
+        <p className="dialog-copy">
+          Export the isolated document at full resolution. Selection guides and editor controls are
+          excluded.
+        </p>
+        <label className="select-field">
+          <span>FORMAT</span>
+          <select
+            value={exportFormat}
+            onChange={(event) => setExportFormat(event.target.value as ExportFormat)}
+          >
+            <option value="png">PNG / LOSSLESS + ALPHA</option>
+            <option value="jpeg">JPEG / COMPACT</option>
+          </select>
+        </label>
+        {exportFormat === "jpeg" ? (
+          <div className="dialog-control-stack">
+            <NumericField
+              label="QUALITY"
+              value={Math.round(exportQuality * 100)}
+              min={10}
+              max={100}
+              suffix="%"
+              onChange={(value) => setExportQuality(value / 100)}
+            />
+            <NumericField
+              label="TARGET SIZE"
+              value={exportTargetKilobytes}
+              min={0}
+              max={102400}
+              suffix="KB"
+              onChange={setExportTargetKilobytes}
+            />
+            <label className="color-field">
+              <span>ALPHA MATTE</span>
+              <input
+                type="color"
+                value={exportMatte}
+                onChange={(event) => setExportMatte(event.target.value)}
+              />
+              <code>{exportMatte}</code>
+            </label>
+          </div>
+        ) : (
+          <p className="tool-options-help">PNG PRESERVES ALPHA. QUALITY DOES NOT APPLY.</p>
+        )}
+        <label className="option-row">
+          <span>EXPORT SELECTION BOUNDS</span>
+          <input
+            type="checkbox"
+            checked={exportSelectionOnly}
+            disabled={!selection}
+            onChange={(event) => setExportSelectionOnly(event.target.checked)}
+          />
+        </label>
+      </Dialog>
+
+      <Dialog
+        open={resizeDialogOpen}
+        title="RESIZE DOCUMENT"
+        onClose={() => setResizeDialogOpen(false)}
+        footer={
+          <>
+            <UiButton onClick={() => setResizeDialogOpen(false)}>CANCEL</UiButton>
+            <UiButton tone="accent" onClick={handleCommitResize}>
+              RESIZE
+            </UiButton>
+          </>
+        }
+      >
+        <p className="dialog-copy">Change output dimensions. This operation is undoable.</p>
+        <div className="new-document-fields">
+          <NumericField
+            label="WIDTH"
+            value={resizeWidth}
+            min={1}
+            max={8192}
+            suffix="PX"
+            onChange={(width) => {
+              setResizeWidth(width);
+              if (resizeLinked && documentModel) {
+                setResizeHeight(
+                  Math.max(1, Math.round((width * documentModel.height) / documentModel.width)),
+                );
+              }
+            }}
+          />
+          <NumericField
+            label="HEIGHT"
+            value={resizeHeight}
+            min={1}
+            max={8192}
+            suffix="PX"
+            onChange={(height) => {
+              setResizeHeight(height);
+              if (resizeLinked && documentModel) {
+                setResizeWidth(
+                  Math.max(1, Math.round((height * documentModel.width) / documentModel.height)),
+                );
+              }
+            }}
+          />
+        </div>
+        <label className="option-row">
+          <span>LINK ASPECT</span>
+          <input
+            type="checkbox"
+            checked={resizeLinked}
+            onChange={(event) => setResizeLinked(event.target.checked)}
+          />
+        </label>
+        <label className="select-field">
+          <span>RESAMPLING</span>
+          <select
+            value={resampling}
+            onChange={(event) => setResampling(event.target.value as ResamplingMode)}
+          >
+            <option value="nearest">NEAREST / HARD PIXELS</option>
+            <option value="bilinear">BILINEAR / FAST</option>
+            <option value="high">HIGH QUALITY</option>
+          </select>
+        </label>
+      </Dialog>
+
+      <Dialog
+        open={recoveryRecord !== null}
+        title="RESTORE LOCAL RECOVERY?"
+        onClose={handleDiscardRecovery}
+        footer={
+          <>
+            <UiButton onClick={handleDiscardRecovery}>DISCARD</UiButton>
+            <UiButton tone="accent" onClick={() => void handleRestoreRecovery()}>
+              RESTORE
+            </UiButton>
+          </>
+        }
+      >
+        <p className="dialog-copy">
+          LiteEdit found a local document recovery from{" "}
+          {recoveryRecord
+            ? new Date(recoveryRecord.savedAt).toLocaleString()
+            : "an earlier session"}
+          . No image data leaves this device.
+        </p>
       </Dialog>
     </div>
   );

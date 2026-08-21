@@ -33,6 +33,9 @@ describe("editor keyboard shortcuts", () => {
     expect(getShortcutAction(new KeyboardEvent("keydown", { key: "Enter" }))).toEqual({
       type: "commit",
     });
+    expect(getShortcutAction(new KeyboardEvent("keydown", { key: "Delete" }))).toEqual({
+      type: "clear-pixels",
+    });
     expect(getShortcutAction(new KeyboardEvent("keydown", { key: "ArrowRight" }))).toEqual({
       type: "nudge",
       x: 1,

@@ -70,5 +70,5 @@ test("moves, commits or cancels transforms, and round-trips a raster warp", asyn
     .getByRole("toolbar", { name: "History commands" })
     .getByRole("button", { name: "REDO" })
     .click();
-  await expect(page.getByText("BUILD / PHASE 5")).toBeVisible();
+  await expect(page.getByText("BUILD / V1 RELEASE")).toBeVisible();
 });

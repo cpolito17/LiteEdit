@@ -1394,6 +1394,14 @@ function App() {
           </span>
           <span className="brand-name">LiteEdit</span>
           <span className="brand-version">V1.0 / LOCAL EDITOR</span>
+          <a
+            className="portfolio-link"
+            href="https://charliepolito.com/"
+            aria-label="Back to CharliePolito.com portfolio"
+          >
+            <img src="/charlie-monogram.svg" alt="" aria-hidden="true" />
+            <span>CharliePolito.com</span>
+          </a>
         </div>
 
         <div className="command-actions" role="group" aria-label="Document commands">

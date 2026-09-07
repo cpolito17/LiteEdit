@@ -1,0 +1,10 @@
+{
+  "name": "LiteEdit",
+  "short_name": "LiteEdit",
+  "description": "A private, local-first browser image editor.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#101719",
+  "theme_color": "#101719",
+  "icons": [{ "src": "/charlie-monogram.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

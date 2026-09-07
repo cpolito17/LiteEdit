@@ -57,6 +57,48 @@
   text-transform: none;
 }
 
+.portfolio-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  margin-left: 10px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink-muted);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  text-transform: none;
+}
+.portfolio-link img {
+  width: 20px;
+  height: 20px;
+}
+.portfolio-link:hover,
+.portfolio-link:focus-visible {
+  border-color: var(--accent-mint);
+  color: var(--ink);
+}
+
+@media (max-width: 920px) {
+  .portfolio-link {
+    margin-left: 2px;
+    padding: 0 6px;
+  }
+
+  .portfolio-link span,
+  .brand-version {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
 .brand-version,
 .tool-shortcut,
 .panel-count,

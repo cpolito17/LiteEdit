@@ -1,34 +1,50 @@
 # LiteEdit
 
-LiteEdit is a desktop-first, browser-local photo editor. The Worker serves static application assets. Image decoding, editing, history, and export stay on the user's device.
+LiteEdit is a private, local-first photo and graphics editor that runs entirely in the browser. Open an image, combine raster and vector layers, make precise edits, and export the result without uploading source files to a server.
 
-## Current status
+**Live editor:** https://liteedit.charliepolito.com/
 
-LiteEdit v1 is implemented as a browser-local release candidate. It includes raster brush and eraser tools with dirty-tile history, composite color picking and persistent swatches, vector shapes and rasterization, marquee/lasso/quick/object selection, selection-aware editing, crop and document resize, PNG/JPEG export with JPEG target-size search, IndexedDB recovery, diagnostics, and memory/history instrumentation. The Phase 0-5 import, layer, affine-transform, warp, and bounded-history workflows remain available.
+**Portfolio:** [charliepolito.com](https://charliepolito.com/)
 
-All image decoding, pixel editing, recovery, and export remain on the device. The only unresolved acceptance gate is the real-photo Object Selection benchmark: five approved local photos are still required to certify the provisional lazy-loaded foreground extractor at four-of-five successful isolations under two seconds. See [known limitations](docs/known-limitations.md).
+**Source:** [github.com/cpolito17/LiteEdit](https://github.com/cpolito17/LiteEdit)
 
-## Development
+## Features
+
+- Local PNG, JPEG, and WebP import with validation
+- Raster painting, selections, transforms, crop, resize, and warp
+- Vector shapes and hierarchical layer management
+- Undo/redo history, document recovery, swatches, and export controls
+- Keyboard shortcuts and accessible application controls
+
+## Architecture and technology
+
+This is a client-only React and TypeScript app. Fabric.js drives canvas rendering, Zustand supports focused state, and dedicated modules handle imports, raster sources, selections, transforms, history, recovery, and exports. Vitest covers domain logic and Playwright covers browser workflows. It is built with Vite and deployed on Cloudflare Workers.
+
+## Local setup and scripts
+
+Requires Node.js 24 (see `.nvmrc`) and npm.
 
 ```bash
 npm ci
 npm run dev
+npm run verify       # format, lint, types, tests, and build
+npm run test:e2e     # Playwright browser tests
+npm run cf:dry-run   # validate the Cloudflare bundle
+npm run preview
 ```
 
-Run the local checks:
+## Environment variables
 
-```bash
-npm run verify
-npm run test:e2e
-npm run cf:dry-run
-```
+None are required. The editor has no authenticated API integration. Do not add secrets to Vite client variables or committed environment files.
 
-The component gallery is available at `/__gallery` while running `npm run dev`. The Phase 1 browser harness is available at `/__spikes/phase1`.
+## Deployment
 
-Use Node `24.19.0` for local development. Do not commit `.env`, `.dev.vars`, credentials, account IDs, or image fixtures with restricted rights.
+`npm run deploy` verifies and publishes the static Vite app using `wrangler.jsonc`. The custom production domain is `liteedit.charliepolito.com`.
 
-## Deployment target
+## Security and privacy
 
-The production target is `https://liteedit.charliepolito.com`. Cloudflare Workers Static Assets serves the built SPA. v1 has no API, database, object storage, account system, or server-side image processing.
+Images and edits remain on the device; there is no upload endpoint. Recovery data and swatches use browser storage. Image imports are constrained by the validation layer, while `public/_headers` limits scripts, network access, framing, and browser capabilities. Run `npm audit` and the complete verification suite before releases. On shared devices, clear site storage to remove recovery information.
 
-See [the build plan](BUILD_PLAN.md), [v1 release notes](docs/release-v1.md), [design system](docs/design-system.md), [architecture notes](docs/architecture.md), and [deployment runbook](docs/deployment.md).
+## Status and license
+
+This is an active v1 personal project. No license file is included, so reuse rights are reserved by default.
